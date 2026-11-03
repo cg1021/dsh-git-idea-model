@@ -74,16 +74,34 @@
         E(ConfirmDialogHost, { t: props.t }))
     }
 
+    /* The frame-wide commit card (the composer pill's 提交 verb) wraps the same
+       card the Git panel's commit tab renders inline (see Workbench): one body,
+       two shells. */
+    function CommitDialogBody(props) {
+      return E('div', {
+        className: 'git4idea-commit-overlay',
+        'data-git4idea-commit-dialog': '',
+        onMouseDown: (event) => { if (event.target === event.currentTarget) props.onClose() },
+      },
+        E(CommitCard, { entry: props.entry, t: props.t, onClose: props.onClose }))
+    }
+
     /* The card is the panel's commit layer, rebuilt without the panel: every
        mutation runs its own route call and reloads the summary, so the overlay
-       never depends on a mounted Git tab. */
-    function CommitDialogBody(props) {
+       never depends on a mounted Git tab. props.active re-reads the summary
+       each time the host surface (the commit tab) becomes visible — staging
+       done elsewhere must be on screen when the user arrives. */
+    function CommitCard(props) {
       const t = props.t
       const entry = props.entry
       const [summary, setSummary] = useState(null)
       const [busy, setBusy] = useState(false)
       const [groupBy, setGroupBy] = useState('flat')
       const [foldedDirs, setFoldedDirs] = useState({})
+      /* View options of the commit tab's header (user request): grouping and
+         the ignored-file display. Local state — the composer pill's dialog
+         never passes these props and keeps the old defaults. */
+      const [showIgnored, setShowIgnored] = useState(props.showIgnored === true)
       const [rowMenu, setRowMenu] = useState(null)
       const [discardAsk, setDiscardAsk] = useState(null)
       const anchorRef = useRef(null)
@@ -91,13 +109,57 @@
          checkbox still decides what the commit carries. */
       const [selection, setSelection] = useState(() => new Set())
       const [picked, setPicked] = useState(null)
+      /* Draggable 40/60 split (user request): the left pane's width as a ratio
+         of the card, remembered with the other panel settings. */
+      const COMMIT_SPLIT_KEY = 'dsh-git4idea.commit-split.v1'
+      const COMMIT_SPLIT_DEFAULT = 0.4
+      const readSplitRatio = () => {
+        const raw = readStored(COMMIT_SPLIT_KEY)
+        const value = raw === null ? Number.NaN : Number.parseFloat(raw)
+        return Number.isFinite(value) && value >= 0.2 && value <= 0.8 ? value : COMMIT_SPLIT_DEFAULT
+      }
+      const [splitRatio, setSplitRatio] = useState(readSplitRatio)
+      const splitRef = useRef(splitRatio)
+      splitRef.current = splitRatio
+      /* The container is captured ONCE at drag start: the document-level
+         pointermove listener has `document` as currentTarget, so resolving
+         the card there can never work. */
+      const splitBoxRef = useRef(null)
+      const onSplitPointer = (event) => {
+        const card = splitBoxRef.current
+        if (card === null) return
+        const rect = card.getBoundingClientRect()
+        if (!(rect.width > 0)) return
+        const px = event.clientX - rect.left
+        const next = Math.min(0.8, Math.max(0.2, px / rect.width))
+        setSplitRatio(next)
+      }
+      const endSplitPointer = () => {
+        writeStored(COMMIT_SPLIT_KEY, String(splitRef.current))
+        document.removeEventListener('pointermove', onSplitPointer)
+        document.removeEventListener('pointerup', endSplitPointer)
+        setSplitDragging(false)
+      }
+      const [splitDragging, setSplitDragging] = useState(false)
+      const startSplitDrag = (event) => {
+        event.preventDefault()
+        splitBoxRef.current = event.currentTarget.closest('.git4idea-commit-layer-body')
+        onSplitPointer(event)
+        setSplitDragging(true)
+        document.addEventListener('pointermove', onSplitPointer)
+        document.addEventListener('pointerup', endSplitPointer)
+      }
+      useEffect(() => () => {
+        document.removeEventListener('pointermove', onSplitPointer)
+        document.removeEventListener('pointerup', endSplitPointer)
+      }, [])
       const base = { cwd: entry.cwd, repoRoot: entry.repoRoot }
       const messageOf = (caught) => (caught !== null && caught !== undefined && typeof caught.message === 'string' && caught.message !== ''
         ? caught.message
         : String(caught))
       const loadSummary = async () => {
         try {
-          const data = await request('summary', Object.assign({}, base, { ignored: false, stats: true }))
+          const data = await request('summary', Object.assign({}, base, { ignored: showIgnored === true, stats: true }))
           setSummary(data)
           return data
         } catch (caught) {
@@ -105,19 +167,22 @@
           return null
         }
       }
-      useEffect(() => { void loadSummary() }, [])
+      useEffect(() => { void loadSummary() }, [showIgnored])
+      /* The commit tab mounts this card once and shows it per tab; re-reading
+         on every activation keeps the list honest about staging done elsewhere. */
+      useEffect(() => { if (props.active === true) void loadSummary() }, [props.active])
       /* One mutation at a time: staging, discarding and committing all reload
          the same summary, so overlapping calls would race their results. */
-      const call = async (method, payload) => {
+      const call = async (method, payload, options) => {
         setBusy(true)
         try {
-          await request(method, Object.assign({}, base, payload))
+          const result = await request(method, Object.assign({}, base, payload))
           await loadSummary()
-          notifyOk(successToastText(t, method, payload))
-          return true
+          if (options === undefined || options.silent !== true) notifyOk(successToastText(t, method, payload))
+          return result
         } catch (caught) {
           notifyFail(caught)
-          return false
+          return undefined
         } finally {
           setBusy(false)
         }
@@ -159,44 +224,81 @@
           }
         })()
       }
-      useEffect(() => {
-        const onKey = (event) => {
-          if (event.key !== 'Escape') return
-          if (rowMenu !== null) { setRowMenu(null); return }
-          if (discardAsk !== null) { setDiscardAsk(null); return }
-          props.onClose()
-        }
-        document.addEventListener('keydown', onKey)
-        return () => document.removeEventListener('keydown', onKey)
-      }, [rowMenu, discardAsk, props.onClose])
+      /* No Escape handler: the card is frame-anchored only through the dialog
+         shell; the commit tab keeps it mounted and must not be closed by a key. */
       const stagedPaths = () => (summary === null ? [] : summary.changes.staged.map((item) => item.path))
-      const rowMenuItems = rowMenu === null ? [] : [
-        rowMenu.group === 'staged'
-          ? { id: 'unstage', icon: 'minus', label: t('action.unstage'), run: () => { void call('unstage', { paths: [rowMenu.item.path] }) } }
-          : { id: 'stage', icon: 'plus', label: t('action.stage'), run: () => { void call('stage', { paths: [rowMenu.item.path] }) } },
-        { id: 'diff', icon: 'diff', label: t('action.showDiff'), run: () => { void openDiff(rowMenu.item, rowMenu.group) } },
-        null,
-        {
-          id: 'discard', icon: 'undo', danger: true, label: t('action.discard'),
-          run: () => setDiscardAsk({ item: rowMenu.item, group: rowMenu.group }),
-        },
-      ]
-      return E('div', {
-        className: 'git4idea-commit-overlay',
-        'data-git4idea-commit-dialog': '',
-        onMouseDown: (event) => { if (event.target === event.currentTarget) props.onClose() },
-      },
-        E('div', { className: 'git4idea-commit-layer-card', 'data-git4idea-commit-card': '' },
-          E('div', { className: 'git4idea-commit-layer-head' },
-            E(Icon, { name: 'commit', size: 13 }),
-            E('span', { className: 'git4idea-commit-layer-title' }, t('changes.title')),
-            E('span', { className: 'git4idea-topbar-spacer' }),
-            E('button', {
-              type: 'button', className: 'git4idea-icon-btn', 'data-tip': t('confirm.cancel'),
-              onClick: () => props.onClose(),
-            }, E(Icon, { name: 'close', size: 12 }))),
-          E('div', { className: 'git4idea-commit-layer-body' },
-            E('div', { className: 'git4idea-commit-layer-left' },
+      const ignoreAdd = (item, local) => {
+        /* A directory row keeps its trailing slash: git ignores the whole
+           folder, not just the name. The summary marks directories. */
+        const pattern = item.dir === true && item.path.slice(-1) !== '/' ? item.path + '/' : item.path
+        void (async () => {
+          const result = await call('ignoreAdd', { paths: [pattern], local: local === true }, { silent: true })
+          if (result === undefined) return
+          toastCenter.push({
+            text: fill(t(local === true ? 'toast.ignoreAddedLocal' : 'toast.ignoreAdded'), { path: pattern, file: local === true ? '.git/info/exclude' : '.gitignore' }),
+            tone: 'ok', icon: 'check',
+          })
+        })()
+      }
+      const ignoreEntriesOf = (item) => ([
+        { id: 'ignore-file', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { setRowMenu(null); ignoreAdd(item, false) } },
+        { id: 'ignore-local', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { setRowMenu(null); ignoreAdd(item, true) } },
+      ])
+      /* Directory rows (user request): ignore verbs + copy, no diff/stage.
+         Same card-relative offsets as the row menu above. */
+      const folderMenu = (event, dirPath) => {
+        const dirItem = { path: dirPath, dir: true }
+        const host = event.currentTarget instanceof Element ? event.currentTarget.closest('.git4idea-commit-layer-card') : null
+        const rect = host === null ? null : host.getBoundingClientRect()
+        setRowMenu({
+          item: dirItem, group: 'untracked', folderOnly: true,
+          x: event.clientX - (rect === null ? 0 : rect.left),
+          y: event.clientY - (rect === null ? 0 : rect.top),
+          boundsWidth: rect === null ? undefined : Math.round(rect.width),
+          boundsHeight: rect === null ? undefined : Math.round(rect.height),
+        })
+      }
+      const rowMenuItems = rowMenu === null ? [] : (
+        rowMenu.folderOnly === true ? [
+          { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) },
+          null,
+          { id: 'copy', icon: 'tag', label: t('action.copyPath'), run: () => { copyText(rowMenu.item.path) } },
+        ] : [
+          rowMenu.group === 'staged'
+            ? { id: 'unstage', icon: 'minus', label: t('action.unstage'), run: () => { void call('unstage', { paths: [rowMenu.item.path] }) } }
+            : { id: 'stage', icon: 'plus', label: t('action.stage'), run: () => { void call('stage', { paths: [rowMenu.item.path] }) } },
+          { id: 'diff', icon: 'diff', label: t('action.showDiff'), run: () => { void openDiff(rowMenu.item, rowMenu.group) } },
+          rowMenu.group === 'untracked' ? { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) } : null,
+          null,
+          {
+            id: 'discard', icon: 'undo', danger: true, label: t('action.discard'),
+            run: () => setDiscardAsk({ item: rowMenu.item, group: rowMenu.group }),
+          },
+        ])
+      return E(Fragment, null,
+        E('div', { className: 'git4idea-commit-layer-head' },
+          E(Icon, { name: 'commit', size: 13 }),
+          E('span', { className: 'git4idea-commit-layer-title' }, t('changes.title')),
+          /* View options right after the title (user request), left-aligned —
+             the spacer keeps them off the window controls at the right end. */
+          E('select', {
+            className: 'git4idea-select git4idea-commit-view-select',
+            value: groupBy,
+            'aria-label': t('changes.groupBy'), 'data-tip': t('changes.groupBy'),
+            onChange: (event) => setGroupBy(event.target.value),
+          },
+            E('option', { value: 'flat' }, t('changes.groupFlat')),
+            E('option', { value: 'dir' }, t('changes.groupDir'))),
+          E('label', { className: 'git4idea-check git4idea-commit-view-ignored' },
+            E('input', { type: 'checkbox', checked: showIgnored, onChange: (event) => setShowIgnored(event.target.checked) }),
+            E('span', null, t('changes.showIgnored'))),
+          E('span', { className: 'git4idea-topbar-spacer' }),
+          props.onClose === undefined ? null : E('button', {
+            type: 'button', className: 'git4idea-icon-btn', 'data-tip': t('confirm.cancel'),
+            onClick: () => props.onClose(),
+          }, E(Icon, { name: 'close', size: 12 }))),
+        E('div', { className: 'git4idea-commit-layer-body' + (splitDragging === true ? ' git4idea-commit-splitting' : '') },
+            E('div', { className: 'git4idea-commit-layer-left', style: { flex: '0 0 ' + (splitRatio * 100) + '%' } },
               E(ChangesPanel, {
                 t: t, summary: summary, busy: busy, compact: false, hideHeader: true,
                 groupBy: groupBy, sortKey: 'git', onGroupBy: setGroupBy,
@@ -210,7 +312,21 @@
                 onUnstageAll: () => { void call('unstage', { paths: stagedPaths() }) },
                 onDiscard: (item, group) => setDiscardAsk({ item: item, group: group }),
                 onDiff: (item, group) => { openDiff(item, group) },
-                onChangeMenu: (event, item, group) => setRowMenu({ item: item, group: group, x: event.clientX, y: event.clientY }),
+                showIgnored: showIgnored,
+                onChangeMenu: (event, item, group) => {
+                  /* The card is the menu's containing block (see the CSS): store
+                     card-relative offsets, the way the panel does for .git4idea-root. */
+                  const host = event.currentTarget instanceof Element ? event.currentTarget.closest('.git4idea-commit-layer-card') : null
+                  const rect = host === null ? null : host.getBoundingClientRect()
+                  setRowMenu({
+                    item: item, group: group,
+                    x: event.clientX - (rect === null ? 0 : rect.left),
+                    y: event.clientY - (rect === null ? 0 : rect.top),
+                    boundsWidth: rect === null ? undefined : Math.round(rect.width),
+                    boundsHeight: rect === null ? undefined : Math.round(rect.height),
+                  })
+                },
+                onFolderMenu: folderMenu,
                 /* The checkbox is the commit pick; the row click only
                    selects, and feeds the right-hand preview (m05307). */
                 selection: selection,
@@ -218,6 +334,13 @@
                 onSelect: (item, group) => setPicked({ item: item, group: group }),
                 anchorRef: anchorRef,
               })),
+            E('div', {
+              className: 'git4idea-commit-split',
+              role: 'separator',
+              'aria-orientation': 'vertical',
+              onPointerDown: startSplitDrag,
+              onDoubleClick: () => { setSplitRatio(COMMIT_SPLIT_DEFAULT); writeStored(COMMIT_SPLIT_KEY, String(COMMIT_SPLIT_DEFAULT)) },
+            }),
             E('div', { className: 'git4idea-commit-layer-right' },
               picked === null
                 ? E('div', { className: 'git4idea-preview-root' },
@@ -235,7 +358,7 @@
                     },
                     t: t,
                     mergeHead: true,
-                  })))),
+                  }))),
         discardAsk === null ? null : E(ConfirmDialog, {
           key: 'discard',
           t: t,
@@ -255,8 +378,10 @@
         rowMenu === null ? null : E(ContextMenu, {
           key: 'row-menu',
           anchor: { x: rowMenu.x, y: rowMenu.y },
-          boundsWidth: typeof window === 'undefined' ? 0 : window.innerWidth,
-          boundsHeight: typeof window === 'undefined' ? 0 : window.innerHeight,
+          /* The menu is absolute inside the card, so the clamp runs against the
+             card's own box, not the window. */
+          boundsWidth: typeof window === 'undefined' ? 0 : (rowMenu.boundsWidth === undefined ? window.innerWidth : rowMenu.boundsWidth),
+          boundsHeight: typeof window === 'undefined' ? 0 : (rowMenu.boundsHeight === undefined ? window.innerHeight : rowMenu.boundsHeight),
           items: rowMenuItems,
           onClose: () => setRowMenu(null),
         }))

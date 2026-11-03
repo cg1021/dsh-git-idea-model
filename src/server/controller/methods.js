@@ -4,7 +4,7 @@
 
 import { summary, headState, pushPreview, stats, repos, version } from './../services/workspace.js'
 import { branches, log, me, mergePoint, commitDetail, diff, compare, dirTree } from './../services/history.js'
-import { stage, unstage, discard, commit, checkout } from './../services/changes.js'
+import { stage, unstage, discard, commit, checkout, ignoreAdd } from './../services/changes.js'
 import { branchCreate, branchUpstream, branchRename, branchDelete, merge, rebase, rebaseAbort, remoteAdd, remoteRemove, branchDeleteRemote, tagDeleteRemote, pushTags, stashClear, cherryPick, revert, reset } from './../services/branch-ops.js'
 import { fetch, pull, push, clone } from './../services/sync.js'
 import { stashList, stashPush, stashApply, stashDrop, tagCreate, tagDelete } from './../services/stash.js'
@@ -43,6 +43,7 @@ export const METHODS = {
   discard,
   commit,
   checkout,
+  ignoreAdd,
   branchCreate,
   branchRename,
   'branch-upstream': branchUpstream,

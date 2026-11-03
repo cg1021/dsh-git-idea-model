@@ -92,6 +92,12 @@
       const onCommitPicks = useCallback((update) => { setPickedCommits(update); clearPicksExcept('history') }, [clearPicksExcept])
       const [menu, setMenu] = useState(null)
       const [dialog, setDialog] = useState(null)
+      /* The commit page lives at the workbench's tab level now (the first tab,
+         before 日志); the panel's commit buttons only switch to it. The tick
+         fires the switch even when the tab is already active — the card there
+         re-reads its summary on every activation. */
+      const [commitTick, setCommitTick] = useState(0)
+      const openCommitTab = useCallback(() => setCommitTick((value) => value + 1), [])
       /* v0.3.1 (#6): the branch chooser card sits under the top-bar button and
          keeps its own seat, so the panel does not re-anchor it on every poll. */
       const [chooserSeat, setChooserSeat] = useState(null)
@@ -1342,6 +1348,34 @@
         openMenuAt(event, items)
       }, [run, selectCommit, t, openMenuAt, blocked, sendToComposer, sendGitSummaryToChat, repoLabel, pickedCommits, commits, copyValues])
 
+      /* Append an ignore pattern (.gitignore or .git/info/exclude). The host
+         dedupes and appends; the panel reports and refreshes through run().
+         Plain function: run is declared below (hooks TDZ rule). */
+      const ignoreAdd = async (item, local) => {
+        const pattern = item.dir === true && item.path.slice(-1) !== '/' ? item.path + '/' : item.path
+        const data = await run('ignoreAdd', { paths: [pattern], local: local === true }, { quiet: true })
+        if (data === undefined) return
+        pushToast({
+          text: fill(t(local === true ? 'toast.ignoreAddedLocal' : 'toast.ignoreAdded'), { path: pattern, file: local === true ? '.git/info/exclude' : '.gitignore' }),
+          icon: 'check', tone: 'ok',
+        })
+      }
+
+      /* Directory rows in dir-grouped mode (user request): the menu carries the
+         ignore verbs only — a folder has no diff and nothing to stage. The
+         pattern keeps the trailing slash, which is what gitignore wants. */
+      const folderMenu = useCallback((event, dirPath, group) => {
+        const dirItem = { path: dirPath, dir: true }
+        openMenuAt(event, [
+          { id: 'ignore', icon: 'filter', tone: 'warn', label: t('menu.ignoreTitle'), items: [
+            { id: 'ignore-file', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { void ignoreAdd(dirItem, false) } },
+            { id: 'ignore-local', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { void ignoreAdd(dirItem, true) } },
+          ] },
+          null,
+          { id: 'copy', icon: 'tag', tone: 'secondary', label: t('action.copyPath'), run: () => { copyText(dirPath) } },
+        ])
+      }, [openMenuAt, t, ignoreAdd, copyText])
+
       const changeMenu = useCallback((event, item, group) => {
         /* Multi-select: right-clicking a row that belongs to the selection
            acts on the WHOLE selection (stage N / unstage N / discard N). */
@@ -1376,6 +1410,12 @@
         const items = [
           { id: 'diff', icon: 'file', tone: 'primary', label: t('action.showDiff'), run: () => { showDiff({ path: item.path, staged: group === 'staged', untracked: group === 'untracked' }) } },
           { id: 'sendRef', icon: 'send', tone: 'accent', label: t('menu.sendToChat'), run: () => sendFileReferenceToChat(item.path) },
+          /* Untracked rows only (user request): the ignore verb must live beside
+             the stage verb, with one target per entry. */
+          group === 'untracked' ? { id: 'ignore', icon: 'filter', tone: 'warn', label: t('menu.ignoreTitle'), items: [
+            { id: 'ignore-file', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { void ignoreAdd(item, false) } },
+            { id: 'ignore-local', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { void ignoreAdd(item, true) } },
+          ] } : null,
           null,
           group === 'staged'
             ? { id: 'unstage', icon: 'minus', tone: 'warn', label: t('action.unstage'), run: () => { void run('unstage', { paths: [item.path] }) } }
@@ -1385,7 +1425,7 @@
           { id: 'copy', icon: 'tag', tone: 'secondary', label: t('action.copyPath'), run: () => { copyText(item.path) } },
         ]
         openMenuAt(event, items)
-      }, [showDiff, run, t, openMenuAt, openConflict, sendFileReferenceToChat, sendToComposer, changeSelection, changeSelectionGroups, openDiscardManyDialog, copyValues])
+      }, [showDiff, run, t, openMenuAt, openConflict, sendFileReferenceToChat, sendToComposer, changeSelection, changeSelectionGroups, openDiscardManyDialog, copyValues, ignoreAdd])
 
       /* The commit-detail file list shares the working-tree row menu, minus the
          staging verbs: a committed file's diff replays against its commit. */
@@ -1718,8 +1758,7 @@
           'data-tip': t('changes.commit'),
           onClick: () => {
             if (repoRoot === null) return
-            const scopeObject = scope || {}
-            commitDialog.set({ sessionId: scopeObject.sessionId, cwd: cwd, repoRoot: repoRoot })
+            openCommitTab()
           },
         }, E('span', { className: 'git4idea-track-commit' },
           E(Icon, { name: 'commit', size: 12 }),
@@ -2079,6 +2118,7 @@
         onDiscard: (item, group) => setDialog({ kind: 'discard', item: item, group: group }),
         onDiff: onDiff,
         onChangeMenu: changeMenu,
+        onFolderMenu: folderMenu,
         /* ---- multi-select (issue #13) ---- */
         selection: changeSelection,
         onSelectionChange: onChangeSelection,
@@ -2415,7 +2455,7 @@
              the toolbar's commit button opens. */
           onCommit: () => {
             setChooserSeat(null)
-            commitDialog.set({ sessionId: (scope || {}).sessionId, cwd: cwd, repoRoot: repoRoot })
+            openCommitTab()
           },
           onPush: () => { setChooserSeat(null); openPushDialog() },
         })))
@@ -2716,6 +2756,12 @@
       },
         E(Workbench, {
           t: t, base: base, request: request,
+          /* The commit tab mounts its own card with these; the panel's commit
+             buttons only raise the tab. */
+          sessionId: sessionId,
+          cwd: cwd,
+          repoRoot: repoRoot,
+          commitTick: commitTick,
           /* The tab strip sits above the branch row (m00174), so the branch
              bar travels with the workbench and paints under the tabs. */
           topBar: topBar,

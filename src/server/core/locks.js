@@ -25,7 +25,7 @@ export function withRepoLock(key, work) {
 
 
 export const WRITE_METHODS = new Set([
-  'stage', 'unstage', 'discard', 'commit', 'checkout', 'branchCreate', 'branchRename', 'branch-upstream',
+  'stage', 'unstage', 'discard', 'commit', 'checkout', 'ignoreAdd', 'branchCreate', 'branchRename', 'branch-upstream',
   'branchDelete', 'merge', 'rebase', 'cherryPick', 'revert', 'reset', 'fetch', 'pull',
   'push', 'stashPush', 'stashApply', 'stashDrop', 'stashClear', 'tagCreate', 'tagDelete', 'tagDeleteRemote', 'pushTags', 'clone', 'remoteAdd', 'remoteRemove', 'branchDeleteRemote', 'undoApply',
   'worktreeAdd', 'worktreeRemove',
