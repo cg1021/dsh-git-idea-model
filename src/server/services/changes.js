@@ -2,6 +2,8 @@
  * dsh-git4idea — services / changes (host half, plain JavaScript).
  */
 
+import path from 'node:path'
+import fsPromises from 'node:fs/promises'
 import { badRequest } from './../core/errors.js'
 import { runGit, git } from './../core/git.js'
 import { requireRef, requireMessage, cwdOf, optionalPaths } from './../core/payload.js'
@@ -112,4 +114,39 @@ export async function checkout(payload) {
   const target = requireRef(payload.branch, 'branch')
   await git(root, ['checkout', target])
   return { branch: target, created: false }
+}
+
+
+/* Append ignore patterns to .gitignore (repository root) or
+   .git/info/exclude (local only, never committed). The patterns are
+   repository-relative paths, one entry per call target; a directory path
+   keeps its trailing slash so git ignores the whole folder. The file is
+   inspected before writing: a pattern that is already present is not
+   duplicated. */
+export async function ignoreAdd(payload) {
+  const cwd = cwdOf(payload)
+  const root = await repoRootOf(cwd, payload)
+  const paths = optionalPaths(payload, 'paths').filter((entry) => entry !== '')
+  if (paths.length === 0) throw badRequest('paths is required')
+  const local = payload.local === true
+  /* The exclude file lives under .git, which itself must never be ignored. */
+  const clean = paths.filter((entry) => entry.split('/').every((segment) => segment !== '.git'))
+  if (clean.length === 0) throw badRequest('paths must not name .git')
+  const file = local ? path.join(root, '.git', 'info', 'exclude') : path.join(root, '.gitignore')
+  const lines = clean
+  let existing = ''
+  try { existing = await fsPromises.readFile(file, 'utf8') } catch (error) { void error }
+  const have = new Set(existing.split(/\r?\n/).map((line) => line.trim()))
+  const fresh = lines.filter((line) => have.has(line) !== true && have.has(line.slice(0, -1)) !== true)
+  if (fresh.length === 0) return { added: 0, file: local ? '.git/info/exclude' : '.gitignore' }
+  let body = existing
+  if (body !== '' && body.slice(-1) !== '\n') body += '\n'
+  body += fresh.join('\n') + '\n'
+  if (local === true) {
+    /* .git/info/ exists in every repository git creates; create it only as a
+       fallback for a hand-made one, and never touch .gitignore there. */
+    await fsPromises.mkdir(path.dirname(file), { recursive: true })
+  }
+  await fsPromises.writeFile(file, body, 'utf8')
+  return { added: fresh.length, file: local ? '.git/info/exclude' : '.gitignore' }
 }

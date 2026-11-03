@@ -1,11 +1,12 @@
 /**
- * dsh-git4idea — client / workbench (log · console · worktree tabs).
+ * dsh-git4idea — client / workbench (commit · log · console · worktree tabs).
  *
  * The detail column used to show only the picked commit. It now carries the
- * three IDEA tool-window tabs: the commit log (unchanged), the console (the
- * host's console.log, one block per git run, Beijing time), and the worktree
- * list. All three read through the same request() fence as the rest of the
- * panel; the console refreshes only after a git run, never on a timer.
+ * IDEA tool-window tabs: the commit page (the frame-wide commit card, rendered
+ * inline — first tab, the default), the commit log, the console (the host's
+ * console.log, one block per git run, Beijing time), and the worktree list.
+ * All of them read through the same request() fence as the rest of the panel;
+ * the console refreshes only after a git run, never on a timer.
  */
 
 /* Paths arrive from the host already normalized for the running platform.
@@ -146,7 +147,7 @@ function Workbench(props) {
   const t = props.t
   const request = props.request
   const base = props.base
-  const [tab, setTab] = useState('log')
+  const [tab, setTab] = useState('commit')
   const [consoleText, setConsoleText] = useState('')
   const [consoleMeta, setConsoleMeta] = useState(null)
   const [consoleError, setConsoleError] = useState(null)
@@ -220,17 +221,31 @@ function Workbench(props) {
     void loadTrees()
   }, [tab, trees, loadTrees])
 
-  /* Picking a commit is a request for the log tab: without this, a click on
-     the history while the console is open would change nothing on screen. */
+  /* Picking a commit is a request for the log tab — but only when the user
+     actually picks one. The panel auto-selects the newest commit on mount;
+     that is a background gesture and must not yank the default commit tab
+     away to the log. Reset on a repository switch, where the same auto-select
+     runs again. */
+  const logAnchorSeen = useRef(false)
   useEffect(() => {
-    if (typeof props.selectedHash === 'string' && props.selectedHash !== '') setTab('log')
+    if (typeof props.selectedHash !== 'string' || props.selectedHash === '') return
+    if (logAnchorSeen.current === false) { logAnchorSeen.current = true; return }
+    setTab('log')
   }, [props.selectedHash])
 
   /* The tabs belong to the repository on screen, so switching repositories
-     starts again on the log instead of leaving the console of the old one. */
+     starts again on the commit page instead of keeping the old repo's view. */
   useEffect(() => {
-    setTab('log')
+    logAnchorSeen.current = false
+    setTab('commit')
   }, [props.repoRoot])
+
+  /* The commit entry points (panel seat openers) raise this store; the
+     workbench consumes it as "switch to the commit tab". */
+  useEffect(() => {
+    if (props.commitTick === undefined || props.commitTick === null) return
+    setTab('commit')
+  }, [props.commitTick])
 
   const createWorktree = useCallback(async (payload) => {
     setCreating(false)
@@ -282,6 +297,22 @@ function Workbench(props) {
       : E('div', { className: 'git4idea-console-body', ref: consoleRef, onContextMenu: openConsoleMenu },
         shown.map((line, index) => E('div', { key: index, className: consoleLineClass(line) }, line === '' ? ' ' : line))))
 
+  /* The commit tab is the frame-wide commit card, inline: same body the
+     composer pill's dialog wraps, minus the dialog shell. Without a repository
+     there is nothing to commit with, so the log body fills the tab instead. */
+  const commitPane = props.repoRoot === null || props.repoRoot === undefined
+    ? E('div', { className: 'git4idea-workbench-body-inner' }, props.children)
+    : E('div', { className: 'git4idea-commit-layer-card git4idea-commit-tab-card', 'data-git4idea-commit-card': '' },
+        E(CommitCard, {
+          entry: {
+            sessionId: typeof props.sessionId === 'string' ? props.sessionId : 'default',
+            cwd: props.cwd,
+            repoRoot: props.repoRoot,
+          },
+          t: t,
+          active: tab === 'commit',
+        }))
+
   const worktreePane = E('div', { className: 'git4idea-worktrees' },
     E('div', { className: 'git4idea-wt-rail' },
       E('button', { type: 'button', className: 'git4idea-icon-btn', 'data-action': 'worktree-new', 'data-tip': t('worktree.new'), onClick: () => setCreating(true) }, E(Icon, { name: 'plus', size: 13 })),
@@ -317,6 +348,11 @@ function Workbench(props) {
   return E('div', { className: 'git4idea-workbench' },
     showTabs === false ? null : E('div', { className: 'git4idea-tabs', role: 'tablist' },
       E('button', {
+        type: 'button', role: 'tab', className: 'git4idea-tab', 'data-action': 'tab-commit',
+        'data-active': tab === 'commit' ? 'true' : 'false',
+        onClick: () => setTab('commit'),
+      }, t('tab.commit')),
+      E('button', {
         type: 'button', role: 'tab', className: 'git4idea-tab', 'data-action': 'tab-log',
         'data-active': tab === 'log' ? 'true' : 'false',
         onClick: () => setTab('log'),
@@ -339,6 +375,7 @@ function Workbench(props) {
        instead of above the detail pane alone. Every pane stays mounted and the
        inactive ones are hidden: unmounting the log would reset the pane
        measurements that the drag dividers keep in panel state. */
+    E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('commit') }, commitPane),
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('log') }, props.children),
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('console') }, consolePane),
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('worktree') }, worktreePane),

@@ -332,6 +332,9 @@
                 type: 'button', className: 'git4idea-folder-head',
                 style: { paddingLeft: (4 + depth * 12) + 'px' },
                 onClick: () => setFoldedDirs((previous) => Object.assign({}, previous, { [id]: previous[id] !== true })),
+                /* Directory rows answer the right click too (user request): the
+                   verb list runs against the FULL folder path. */
+                onContextMenu: props.onFolderMenu === undefined ? undefined : (event) => { event.preventDefault(); props.onFolderMenu(event, node.path.join('/'), key) },
               },
                 E('span', { className: 'git4idea-chevron' + (open ? ' git4idea-chevron-open' : '') }, E(Icon, { name: 'chevron', size: 10 })),
                 E('span', { className: 'git4idea-row-icon git4idea-tone-accent' }, E(Icon, { name: 'folder', size: 14 })),

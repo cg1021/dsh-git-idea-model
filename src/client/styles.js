@@ -191,6 +191,12 @@
       /* m05307: the card carries the change list AND the file diff, so it takes
          the same footprint as the file card; the pane split is 40/60. */
       '.git4idea-commit-overlay .git4idea-commit-layer-card{width:min(1180px,94vw);height:min(760px,90vh)}',
+      /* The same card rendered INLINE as the commit tab (m0refactor): it fills
+         the workbench body instead of floating — no size caps, no shadow, no
+         border (the default radius 0 is what the panel surface wants). It is
+         also the menu's containing block: the row menu stores card-relative
+         offsets, exactly like the panel does for .git4idea-root. */
+      '.git4idea-commit-tab-card{position:relative;width:100%;height:100%;border:0;box-shadow:none;background:transparent}',
       /* Single-file diff dialog (m02986): the commit card's right pane, lifted
          into its own window. The preview root already owns the head/body split. */
       '.git4idea-file-card{display:flex;flex-direction:column;width:min(1100px,94vw);height:min(720px,88vh);overflow:hidden;border-radius:var(--dsw-radius-md,12px);border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-layer-2));box-shadow:var(--dsw-elevation-prominent,0 18px 48px rgba(0,0,0,.45))}',
@@ -342,6 +348,15 @@
       '.git4idea-commit-layer-body{flex:1;min-height:0;display:flex;overflow:hidden}',
       '.git4idea-commit-layer-left{flex:0 0 40%;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--dsw-alias-border-l2)}',
       '.git4idea-commit-layer-right{flex:1 1 60%;min-width:0;display:flex;flex-direction:column;overflow:hidden}',
+      /* Draggable 40/60 split (user request): a hairline divider between the two
+         panes; a drag sets --git4idea-split-live so the split is felt live. */
+      '.git4idea-commit-split{flex:0 0 8px;cursor:col-resize;display:flex;align-items:stretch;justify-content:center}',
+      '.git4idea-commit-split::before{content:"";width:2px;margin:8px 3px;border-radius:var(--dsw-radius-xs,4px);background:var(--dsw-alias-border-l2)}',
+      '.git4idea-commit-split:hover::before,.git4idea-commit-splitting .git4idea-commit-split::before{background:var(--dsw-alias-state-business-primary,var(--dsw-alias-link))}',
+      '.git4idea-commit-splitting{cursor:col-resize;user-select:none}',
+      /* View options in the commit tab head (user request). */
+      '.git4idea-commit-view-select{max-width:120px;height:24px}',
+      '.git4idea-commit-view-ignored{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary);font-size:12px;white-space:nowrap;cursor:pointer}',
       '.git4idea-compact-bar{display:flex;align-items:center;gap:6px;padding:4px 6px;flex:none}',
       '.git4idea-compact-tree{max-height:42%;flex:none;border-bottom:1px solid var(--dsw-alias-border-l2)}',
       // A divider: an 8px hit area (a fingertip needs it) painted as a 1px hairline
@@ -629,6 +644,7 @@
          (bottom:-1px), not above it; match that placement. */
       '.git4idea-tab[data-active="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:var(--dsw-radius-xs,4px);background:currentColor}',
       '.git4idea-workbench-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}',
+      '.git4idea-workbench-body-inner{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}',
       '.git4idea-console{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}',
       '.git4idea-console-note{padding:4px 8px;color:var(--dsw-alias-label-tertiary);font-size:calc(11px + var(--dsh-content-font-delta-secondary, 0px));flex:none}',
       '.git4idea-console-body{flex:1;min-height:0;overflow:auto;margin:0;padding:4px 8px 10px;font-family:var(--ds-font-family-code,"SF Mono","JetBrains Mono","Fira Code",Consolas,"Liberation Mono",Menlo,Courier,"PingFang SC","Microsoft YaHei",monospace);font-size:calc(11px + var(--dsh-code-font-delta, 0px));line-height:1.5;white-space:pre-wrap;word-break:break-word;user-select:text;cursor:auto}',
