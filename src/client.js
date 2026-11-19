@@ -233,10 +233,13 @@ window.__ModuleLoader__.load({
       'changes.groupBy': '分组依据',
       'changes.groupFlat': '平铺',
       'changes.groupDir': '按目录',
+      'changes.groupModule': '按模块',
       'changes.expandAll': '全部展开',
       'changes.foldAll': '全部折叠',
       'changes.collapseAll': '全部收起',
       'changes.showIgnored': '显示忽略的文件',
+      'commit.viewOptions': '视图选项',
+      'commit.viewDisplay': '显示',
       'changes.rootDir': '(根目录)',
       'changes.commitAndPush': '提交并推送',
       'action.stage': '暂存',
@@ -749,10 +752,13 @@ window.__ModuleLoader__.load({
       'changes.groupBy': 'Group by',
       'changes.groupFlat': 'Flat list',
       'changes.groupDir': 'By directory',
+      'changes.groupModule': 'By module',
       'changes.expandAll': 'Expand all',
       'changes.foldAll': 'Collapse all',
       'changes.collapseAll': 'Collapse all',
       'changes.showIgnored': 'Show ignored files',
+      'commit.viewOptions': 'View options',
+      'commit.viewDisplay': 'Display',
       'changes.rootDir': '(root)',
       'changes.commitAndPush': 'Commit and push',
       'action.stage': 'Stage',
@@ -1238,6 +1244,13 @@ window.__ModuleLoader__.load({
       chevronLeft: [{"d":"m15 6-6 6 6 6"}],
       chevronRight: [{"d":"m9 6 6 6-6 6"}],
       chevronUp: [{"d":"m6 15 6-6 6 6"}],
+      chevronsDown: [{"d":"m7 6 5 5 5-5"},{"d":"m7 13 5 5 5-5"}],
+      chevronsUp: [{"d":"m7 18 5-5 5 5"},{"d":"m7 11 5-5 5 5"}],
+      /* IntelliJ ExpandAll / CollapseAll: two chevrons pointing AWAY from the
+         centre spread the rows apart (expand); pointing INWARD squeeze them
+         back together (collapse). */
+      unfoldMore: [{"d":"m7 9 5-5 5 5"},{"d":"m7 15 5 5 5-5"}],
+      unfoldLess: [{"d":"m7 5 5 5 5-5"},{"d":"m7 19 5-5 5 5"}],
       clock: [{"circle":[12,12,8.5]},{"d":"M12 7.5V12l3 2"}],
       close: [{"d":"M6 6l12 12M18 6 6 18"}],
       collapse: [{"d":"M4 9h5V4M20 15h-5v5M4 4l6 6M20 20l-6-6"}],
@@ -5056,7 +5069,7 @@ window.__ModuleLoader__.load({
       // Lifted to the panel (v0.15): the "..." menu drives the same state, so
       // the header toggle and the menu can never disagree. The alias pair keeps
       // the body reads below untouched.
-      const groupBy = props.groupBy === 'dir' ? 'dir' : 'flat'
+      const groupBy = props.groupBy === 'dir' || props.groupBy === 'module' ? props.groupBy : 'flat'
       const setGroupBy = props.onGroupBy
       const sortKey = props.sortKey === undefined ? 'git' : props.sortKey
       /* foldedDirs lifted too (v0.16.1): the header row lost its four buttons —
@@ -5283,15 +5296,46 @@ window.__ModuleLoader__.load({
         }
         const emitRows = (key, entries) => {
           const sorted = sortedOf(entries)
-          if (groupBy !== 'dir') {
+          if (groupBy !== 'dir' && groupBy !== 'module') {
             for (const item of sorted) out.push({ kind: 'row', key: key + ':' + item.path, h: ITEM_HEIGHTS.row, node: entryRow(key, item) })
             return
           }
+          /* 按模块 (user request): one folder per TOP-LEVEL path segment — the
+             module view of the same forest. "按目录" keeps the full tree. */
           const forest = buildDirForest(sorted, key)
-          /* The label is the chain THIS node adds below its parent (issue
-             #18): a compressed "java/cn/com/pxwk/base" node repeats only the
-             segments below "…/src/main", not the full path from the group
-             root — same convention as the IDE commit tree. */
+          /* Folder tick (user request #4): the checkbox decides the WHOLE
+             subtree's commit pick — checked = every file explicit true,
+             unchecked = every file explicit false, indeterminate = mixed.
+             Descendant folders get explicit false too, so a later refresh of
+             their own files still shows unchecked. */
+          const folderDescendants = (node) => {
+            const files = node.files.slice()
+            for (const child of forest.sortedChildren(node)) files.push(...folderDescendants(child))
+            return files
+          }
+          const folderPickOn = (node) => {
+            const files = folderDescendants(node)
+            let on = 0
+            for (const item of files) { if (pickOn(key, item) === true) on += 1 }
+            return files.length > 0 && on === files.length
+          }
+          const folderPickSome = (node) => {
+            const files = folderDescendants(node)
+            let on = 0
+            for (const item of files) { if (pickOn(key, item) === true) on += 1 }
+            return on > 0 && on < files.length
+          }
+          const toggleFolderPick = (node) => {
+            const on = folderPickOn(node)
+            setGroupPick(key, folderDescendants(node), on === false)
+          }
+          const folderCheck = (node) => E('input', {
+            type: 'checkbox', className: 'git4idea-group-check',
+            checked: folderPickOn(node),
+            ref: (node2) => { if (node2 !== null) node2.indeterminate = folderPickSome(node) },
+            onClick: (event) => { event.stopPropagation() },
+            onChange: () => toggleFolderPick(node),
+          })
           const renderFolder = (node, depth, parentLen) => {
             const id = key + '|' + node.path.join('/')
             const open = foldedDirs[id] !== true
@@ -5305,6 +5349,7 @@ window.__ModuleLoader__.load({
                    verb list runs against the FULL folder path. */
                 onContextMenu: props.onFolderMenu === undefined ? undefined : (event) => { event.preventDefault(); props.onFolderMenu(event, node.path.join('/'), key) },
               },
+                folderCheck(node),
                 E('span', { className: 'git4idea-chevron' + (open ? ' git4idea-chevron-open' : '') }, E(Icon, { name: 'chevron', size: 10 })),
                 E('span', { className: 'git4idea-row-icon git4idea-tone-accent' }, E(Icon, { name: 'folder', size: 14 })),
                 E('span', { className: 'git4idea-folder-name' }, node.path.slice(typeof parentLen === 'number' ? parentLen : 0).join('/')),
@@ -5320,6 +5365,36 @@ window.__ModuleLoader__.load({
           /* Root-level files need no synthetic folder: they sit directly
              under the group head, before the real folders. */
           for (const item of sortedOf(forest.rootFiles)) out.push({ kind: 'row', key: key + ':' + item.path, h: ITEM_HEIGHTS.row, node: entryRow(key, item, 0) })
+          if (groupBy === 'module') {
+            /* Compress every module to ONE row: the node's own files and its
+               whole subtree render flat under the module folder. */
+            const flatten = (node) => {
+              const files = node.files.slice()
+              for (const child of forest.sortedChildren(node)) files.push(...flatten(child))
+              return files
+            }
+            for (const node of forest.roots) {
+              const id = key + '|' + node.path.join('/')
+              const open = foldedDirs[id] !== true
+              out.push({
+                kind: 'folder', key: 'folder:' + id, h: ITEM_HEIGHTS.folder,
+                node: E('button', {
+                  type: 'button', className: 'git4idea-folder-head',
+                  onClick: () => setFoldedDirs((previous) => Object.assign({}, previous, { [id]: previous[id] !== true })),
+                  onContextMenu: props.onFolderMenu === undefined ? undefined : (event) => { event.preventDefault(); props.onFolderMenu(event, node.path.join('/'), key) },
+                },
+                  folderCheck(node),
+                  E('span', { className: 'git4idea-chevron' + (open ? ' git4idea-chevron-open' : '') }, E(Icon, { name: 'chevron', size: 10 })),
+                  E('span', { className: 'git4idea-row-icon git4idea-tone-accent' }, E(Icon, { name: 'folder', size: 14 })),
+                  E('span', { className: 'git4idea-folder-name' }, node.path[node.path.length - 1]),
+                  E('span', { className: 'git4idea-count' }, String(forest.countOf(node)))),
+              })
+              if (open === true) {
+                for (const item of sortedOf(flatten(node))) out.push({ kind: 'row', key: key + ':' + item.path, h: ITEM_HEIGHTS.row, node: entryRow(key, item, 0) })
+              }
+            }
+            return
+          }
           for (const node of forest.roots) renderFolder(node, 0)
         }
         const emitGroup = (key, title, entries) => {
@@ -8398,19 +8473,20 @@ function Workbench(props) {
       }
 
       /* Directory rows in dir-grouped mode (user request): the menu carries the
-         ignore verbs only — a folder has no diff and nothing to stage. The
-         pattern keeps the trailing slash, which is what gitignore wants. */
+         ignore verbs only for UNTRACKED folders — a tracked folder is already
+         in the index, ignoring it makes no sense. Others copy the path. */
       const folderMenu = useCallback((event, dirPath, group) => {
         const dirItem = { path: dirPath, dir: true }
         openMenuAt(event, [
-          { id: 'ignore', icon: 'filter', tone: 'warn', label: t('menu.ignoreTitle'), items: [
+          group === 'untracked' ? { id: 'ignore', icon: 'filter', tone: 'warn', label: t('menu.ignoreTitle'), items: [
             { id: 'ignore-file', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { void ignoreAdd(dirItem, false) } },
             { id: 'ignore-local', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { void ignoreAdd(dirItem, true) } },
-          ] },
+          ] } : null,
+          group === 'untracked' ? null : { id: 'stage', icon: 'plus', tone: 'success', label: t('action.stage'), run: () => { void run('stage', { paths: [dirPath] }) } },
           null,
           { id: 'copy', icon: 'tag', tone: 'secondary', label: t('action.copyPath'), run: () => { copyText(dirPath) } },
-        ])
-      }, [openMenuAt, t, ignoreAdd, copyText])
+        ].filter((entry) => entry !== null))
+      }, [openMenuAt, t, ignoreAdd, copyText, run])
 
       const changeMenu = useCallback((event, item, group) => {
         /* Multi-select: right-clicking a row that belongs to the selection
@@ -8452,7 +8528,6 @@ function Workbench(props) {
             { id: 'ignore-file', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { void ignoreAdd(item, false) } },
             { id: 'ignore-local', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { void ignoreAdd(item, true) } },
           ] } : null,
-          null,
           group === 'staged'
             ? { id: 'unstage', icon: 'minus', tone: 'warn', label: t('action.unstage'), run: () => { void run('unstage', { paths: [item.path] }) } }
             : { id: 'stage', icon: 'plus', tone: 'success', label: t('action.stage'), run: () => { void run('stage', { paths: [item.path] }) } },
@@ -10190,9 +10265,13 @@ function Workbench(props) {
       '.git4idea-commit-split::before{content:"";width:2px;margin:8px 3px;border-radius:var(--dsw-radius-xs,4px);background:var(--dsw-alias-border-l2)}',
       '.git4idea-commit-split:hover::before,.git4idea-commit-splitting .git4idea-commit-split::before{background:var(--dsw-alias-state-business-primary,var(--dsw-alias-link))}',
       '.git4idea-commit-splitting{cursor:col-resize;user-select:none}',
-      /* View options in the commit tab head (user request). */
-      '.git4idea-commit-view-select{max-width:120px;height:24px}',
-      '.git4idea-commit-view-ignored{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary);font-size:12px;white-space:nowrap;cursor:pointer}',
+      /* View options in the commit tab head (user request): the eye dropdown
+         anchors under its button, inside the same wrapper. Height/position
+         rules live after the .git4idea-menu block below, so they win the
+         cascade — the shared menu card's max-height resolves `100%` against
+         this short header strip and would collapse the dropdown to nothing. */
+      '.git4idea-commit-view-wrap{position:relative;display:inline-flex;margin-left:10px}',
+      '.git4idea-folder-head .git4idea-group-check{margin-left:2px}',
       '.git4idea-compact-bar{display:flex;align-items:center;gap:6px;padding:4px 6px;flex:none}',
       '.git4idea-compact-tree{max-height:42%;flex:none;border-bottom:1px solid var(--dsw-alias-border-l2)}',
       // A divider: an 8px hit area (a fingertip needs it) painted as a 1px hairline
@@ -10532,6 +10611,11 @@ function Workbench(props) {
       '.git4idea-menu-disabled{opacity:.38;cursor:default}',
       '.git4idea-menu-sep{flex:none;height:1px;margin:3px 6px;background:var(--dsw-alias-hairline,var(--dsw-alias-border-l1))}',
       '.git4idea-menu-header{flex:none;padding:4px 8px 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      /* The commit tab's eye dropdown (user request). These come AFTER the
+         .git4idea-menu block on purpose: the shared card's max-height uses
+         `calc(100% - 8px)`, which inside the short header wrap collapses the
+         dropdown — this card sizes to its rows instead. */
+      '.git4idea-commit-view-menu{position:absolute;top:calc(100% + 4px);left:0;max-height:min(320px,60vh)}',
       /* v0.3.1 (#N2): the directory picker of the path filter. */
       '.git4idea-dialog-tree{width:440px;max-width:88vw}',
       '.git4idea-path-tree{display:flex;flex-direction:column;gap:1px;max-height:300px;overflow:auto;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm,8px);padding:3px}',
@@ -11223,12 +11307,60 @@ function Workbench(props) {
       const entry = props.entry
       const [summary, setSummary] = useState(null)
       const [busy, setBusy] = useState(false)
-      const [groupBy, setGroupBy] = useState('flat')
+      /* Grouping is a SET now (user request): 按目录 and 按模块 can be on
+         together; with neither, the list falls back to the flat layout. */
+      const [groupModes, setGroupModes] = useState(() => new Set(['dir']))
+      const toggleGroupMode = (mode) => {
+        setGroupModes((previous) => {
+          const next = new Set(previous)
+          if (next.has(mode) === true) next.delete(mode)
+          else next.add(mode)
+          return next
+        })
+      }
       const [foldedDirs, setFoldedDirs] = useState({})
       /* View options of the commit tab's header (user request): grouping and
          the ignored-file display. Local state — the composer pill's dialog
          never passes these props and keeps the old defaults. */
       const [showIgnored, setShowIgnored] = useState(props.showIgnored === true)
+      /* The view menu (eye icon) and the fold controls (user request): one
+         dropdown keeps the strip tight — grouping (flat/dir/module) and the
+         ignored-file display live there as two labelled sections. */
+      const [viewMenuOpen, setViewMenuOpen] = useState(false)
+      const viewMenuRef = useRef(null)
+      useEffect(() => {
+        if (viewMenuOpen !== true) return undefined
+        const onDown = (event) => {
+          const host = viewMenuRef.current
+          if (host !== null && host.contains(event.target) === true) return
+          setViewMenuOpen(false)
+        }
+        const onKey = (event) => { if (event.key === 'Escape') setViewMenuOpen(false) }
+        const timer = setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0)
+        document.addEventListener('keydown', onKey)
+        return () => {
+          clearTimeout(timer)
+          document.removeEventListener('pointerdown', onDown, true)
+          document.removeEventListener('keydown', onKey)
+        }
+      }, [viewMenuOpen])
+      /* 展开全部 / 收起全部 (user request): the same fold ids the directory
+         forest builds (see buildDirForest.ids) — 写一个 state flip。 */
+      const setAllFolders = (open) => {
+        setFoldedDirs(() => {
+          if (open === true) return {}
+          const next = {}
+          /* The ids are rebuilt from the CURRENT summary; an empty summary
+             folds nothing. */
+          const changes = summary === null ? null : summary.changes
+          if (changes === null) return next
+          for (const pair of [['conflicted', changes.conflicted], ['staged', changes.staged], ['unstaged', changes.unstaged], ['untracked', changes.untracked], ['ignored', changes.ignored === undefined ? [] : changes.ignored]]) {
+            const forest = buildDirForest(pair[1], pair[0])
+            for (const id of forest.ids) next[id] = true
+          }
+          return next
+        })
+      }
       const [rowMenu, setRowMenu] = useState(null)
       const [discardAsk, setDiscardAsk] = useState(null)
       const anchorRef = useRef(null)
@@ -11371,14 +11503,15 @@ function Workbench(props) {
         { id: 'ignore-file', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { setRowMenu(null); ignoreAdd(item, false) } },
         { id: 'ignore-local', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { setRowMenu(null); ignoreAdd(item, true) } },
       ])
-      /* Directory rows (user request): ignore verbs + copy, no diff/stage.
-         Same card-relative offsets as the row menu above. */
-      const folderMenu = (event, dirPath) => {
+      /* Directory rows (user request): ignore verbs for untracked folders,
+         stage for tracked ones, copy for both. Same card-relative offsets as
+         the row menu above. */
+      const folderMenu = (event, dirPath, group) => {
         const dirItem = { path: dirPath, dir: true }
         const host = event.currentTarget instanceof Element ? event.currentTarget.closest('.git4idea-commit-layer-card') : null
         const rect = host === null ? null : host.getBoundingClientRect()
         setRowMenu({
-          item: dirItem, group: 'untracked', folderOnly: true,
+          item: dirItem, group: group, folderOnly: true,
           x: event.clientX - (rect === null ? 0 : rect.left),
           y: event.clientY - (rect === null ? 0 : rect.top),
           boundsWidth: rect === null ? undefined : Math.round(rect.width),
@@ -11387,7 +11520,9 @@ function Workbench(props) {
       }
       const rowMenuItems = rowMenu === null ? [] : (
         rowMenu.folderOnly === true ? [
-          { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) },
+          rowMenu.group === 'untracked'
+            ? { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) }
+            : { id: 'stage', icon: 'plus', label: t('action.stage'), run: () => { void call('stage', { paths: [rowMenu.item.path] }) } },
           null,
           { id: 'copy', icon: 'tag', label: t('action.copyPath'), run: () => { copyText(rowMenu.item.path) } },
         ] : [
@@ -11396,29 +11531,63 @@ function Workbench(props) {
             : { id: 'stage', icon: 'plus', label: t('action.stage'), run: () => { void call('stage', { paths: [rowMenu.item.path] }) } },
           { id: 'diff', icon: 'diff', label: t('action.showDiff'), run: () => { void openDiff(rowMenu.item, rowMenu.group) } },
           rowMenu.group === 'untracked' ? { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) } : null,
-          null,
           {
             id: 'discard', icon: 'undo', danger: true, label: t('action.discard'),
             run: () => setDiscardAsk({ item: rowMenu.item, group: rowMenu.group }),
           },
         ])
+      const viewMenuItems = [
+        /* 分组 (grouping): multi-select — both on nests module INSIDE nothing,
+           both off reads flat. */
+        { header: true, label: t('changes.groupBy') },
+        { id: 'view-dir', label: t('changes.groupDir'), active: groupModes.has('dir') === true, run: () => toggleGroupMode('dir') },
+        { id: 'view-module', label: t('changes.groupModule'), active: groupModes.has('module') === true, run: () => toggleGroupMode('module') },
+        null,
+        /* 显示 (display): what the list may include. */
+        { header: true, label: t('commit.viewDisplay') },
+        { id: 'view-ignored', label: t('changes.showIgnored'), active: showIgnored === true, run: () => setShowIgnored(showIgnored !== true) },
+      ]
       return E(Fragment, null,
         E('div', { className: 'git4idea-commit-layer-head' },
           E(Icon, { name: 'commit', size: 13 }),
           E('span', { className: 'git4idea-commit-layer-title' }, t('changes.title')),
-          /* View options right after the title (user request), left-aligned —
-             the spacer keeps them off the window controls at the right end. */
-          E('select', {
-            className: 'git4idea-select git4idea-commit-view-select',
-            value: groupBy,
-            'aria-label': t('changes.groupBy'), 'data-tip': t('changes.groupBy'),
-            onChange: (event) => setGroupBy(event.target.value),
-          },
-            E('option', { value: 'flat' }, t('changes.groupFlat')),
-            E('option', { value: 'dir' }, t('changes.groupDir'))),
-          E('label', { className: 'git4idea-check git4idea-commit-view-ignored' },
-            E('input', { type: 'checkbox', checked: showIgnored, onChange: (event) => setShowIgnored(event.target.checked) }),
-            E('span', null, t('changes.showIgnored'))),
+          /* The eye (view options) menu (user request): grouping + display as
+             two labelled sections in one dropdown, anchored under the button. */
+          E('span', { className: 'git4idea-commit-view-wrap', ref: viewMenuRef },
+            E('button', {
+              type: 'button', className: 'git4idea-icon-btn'
+                + (groupModes.size > 0 || showIgnored === true ? ' git4idea-icon-btn-active' : ''),
+              'data-action': 'commit-view',
+              'data-tip': t('commit.viewOptions'),
+              'aria-expanded': viewMenuOpen === true ? 'true' : 'false',
+              onClick: () => setViewMenuOpen(viewMenuOpen !== true),
+            }, E(Icon, { name: 'eye', size: 14 })),
+            viewMenuOpen !== true ? null : E('div', { className: 'git4idea-menu git4idea-menu-sub git4idea-commit-view-menu', 'data-menu-material': 'translucent' },
+              E('div', { className: 'git4idea-menu-scroll' },
+                viewMenuItems.map((item, index) => item === null
+                  ? E('div', { key: 'sep-' + index, className: 'git4idea-menu-sep' })
+                  : item.header === true
+                    ? E('div', { key: 'head-' + index, className: 'git4idea-menu-header' }, item.label)
+                    : E('button', {
+                        key: item.id,
+                        type: 'button',
+                        className: 'git4idea-menu-item' + (item.active === true ? ' git4idea-menu-item-active' : ''),
+                        onClick: () => { item.run(); },
+                      },
+                        E('span', { className: 'git4idea-menu-label' }, item.label),
+                        item.active === true ? E(Icon, { name: 'check', size: 12 }) : null))))),
+          /* 展开全部 / 收起全部 (user request): IntelliJ's ExpandAll/CollapseAll
+             chevron pair — pointing away spreads the tree, pointing in folds it. */
+          E('button', {
+            type: 'button', className: 'git4idea-icon-btn', 'data-action': 'commit-expand',
+            'data-tip': t('changes.expandAll'),
+            onClick: () => setAllFolders(true),
+          }, E(Icon, { name: 'unfoldMore', size: 14 })),
+          E('button', {
+            type: 'button', className: 'git4idea-icon-btn', 'data-action': 'commit-collapse',
+            'data-tip': t('changes.foldAll'),
+            onClick: () => setAllFolders(false),
+          }, E(Icon, { name: 'unfoldLess', size: 14 })),
           E('span', { className: 'git4idea-topbar-spacer' }),
           props.onClose === undefined ? null : E('button', {
             type: 'button', className: 'git4idea-icon-btn', 'data-tip': t('confirm.cancel'),
@@ -11428,7 +11597,10 @@ function Workbench(props) {
             E('div', { className: 'git4idea-commit-layer-left', style: { flex: '0 0 ' + (splitRatio * 100) + '%' } },
               E(ChangesPanel, {
                 t: t, summary: summary, busy: busy, compact: false, hideHeader: true,
-                groupBy: groupBy, sortKey: 'git', onGroupBy: setGroupBy,
+                groupBy: groupModes.has('dir') === true && groupModes.has('module') === true ? 'module'
+                  : groupModes.has('dir') === true ? 'dir'
+                    : groupModes.has('module') === true ? 'module' : 'flat',
+                sortKey: 'git',
                 foldedDirs: foldedDirs, onFoldedDirs: setFoldedDirs,
                 request: request, cwd: entry.cwd, sessionId: entry.sessionId,
                 base: base,
