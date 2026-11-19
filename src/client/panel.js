@@ -1362,19 +1362,20 @@
       }
 
       /* Directory rows in dir-grouped mode (user request): the menu carries the
-         ignore verbs only — a folder has no diff and nothing to stage. The
-         pattern keeps the trailing slash, which is what gitignore wants. */
+         ignore verbs only for UNTRACKED folders — a tracked folder is already
+         in the index, ignoring it makes no sense. Others copy the path. */
       const folderMenu = useCallback((event, dirPath, group) => {
         const dirItem = { path: dirPath, dir: true }
         openMenuAt(event, [
-          { id: 'ignore', icon: 'filter', tone: 'warn', label: t('menu.ignoreTitle'), items: [
+          group === 'untracked' ? { id: 'ignore', icon: 'filter', tone: 'warn', label: t('menu.ignoreTitle'), items: [
             { id: 'ignore-file', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { void ignoreAdd(dirItem, false) } },
             { id: 'ignore-local', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { void ignoreAdd(dirItem, true) } },
-          ] },
+          ] } : null,
+          group === 'untracked' ? null : { id: 'stage', icon: 'plus', tone: 'success', label: t('action.stage'), run: () => { void run('stage', { paths: [dirPath] }) } },
           null,
           { id: 'copy', icon: 'tag', tone: 'secondary', label: t('action.copyPath'), run: () => { copyText(dirPath) } },
-        ])
-      }, [openMenuAt, t, ignoreAdd, copyText])
+        ].filter((entry) => entry !== null))
+      }, [openMenuAt, t, ignoreAdd, copyText, run])
 
       const changeMenu = useCallback((event, item, group) => {
         /* Multi-select: right-clicking a row that belongs to the selection
@@ -1416,7 +1417,6 @@
             { id: 'ignore-file', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { void ignoreAdd(item, false) } },
             { id: 'ignore-local', tone: 'warn', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { void ignoreAdd(item, true) } },
           ] } : null,
-          null,
           group === 'staged'
             ? { id: 'unstage', icon: 'minus', tone: 'warn', label: t('action.unstage'), run: () => { void run('unstage', { paths: [item.path] }) } }
             : { id: 'stage', icon: 'plus', tone: 'success', label: t('action.stage'), run: () => { void run('stage', { paths: [item.path] }) } },

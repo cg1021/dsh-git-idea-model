@@ -96,12 +96,60 @@
       const entry = props.entry
       const [summary, setSummary] = useState(null)
       const [busy, setBusy] = useState(false)
-      const [groupBy, setGroupBy] = useState('flat')
+      /* Grouping is a SET now (user request): 按目录 and 按模块 can be on
+         together; with neither, the list falls back to the flat layout. */
+      const [groupModes, setGroupModes] = useState(() => new Set(['dir']))
+      const toggleGroupMode = (mode) => {
+        setGroupModes((previous) => {
+          const next = new Set(previous)
+          if (next.has(mode) === true) next.delete(mode)
+          else next.add(mode)
+          return next
+        })
+      }
       const [foldedDirs, setFoldedDirs] = useState({})
       /* View options of the commit tab's header (user request): grouping and
          the ignored-file display. Local state — the composer pill's dialog
          never passes these props and keeps the old defaults. */
       const [showIgnored, setShowIgnored] = useState(props.showIgnored === true)
+      /* The view menu (eye icon) and the fold controls (user request): one
+         dropdown keeps the strip tight — grouping (flat/dir/module) and the
+         ignored-file display live there as two labelled sections. */
+      const [viewMenuOpen, setViewMenuOpen] = useState(false)
+      const viewMenuRef = useRef(null)
+      useEffect(() => {
+        if (viewMenuOpen !== true) return undefined
+        const onDown = (event) => {
+          const host = viewMenuRef.current
+          if (host !== null && host.contains(event.target) === true) return
+          setViewMenuOpen(false)
+        }
+        const onKey = (event) => { if (event.key === 'Escape') setViewMenuOpen(false) }
+        const timer = setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0)
+        document.addEventListener('keydown', onKey)
+        return () => {
+          clearTimeout(timer)
+          document.removeEventListener('pointerdown', onDown, true)
+          document.removeEventListener('keydown', onKey)
+        }
+      }, [viewMenuOpen])
+      /* 展开全部 / 收起全部 (user request): the same fold ids the directory
+         forest builds (see buildDirForest.ids) — 写一个 state flip。 */
+      const setAllFolders = (open) => {
+        setFoldedDirs(() => {
+          if (open === true) return {}
+          const next = {}
+          /* The ids are rebuilt from the CURRENT summary; an empty summary
+             folds nothing. */
+          const changes = summary === null ? null : summary.changes
+          if (changes === null) return next
+          for (const pair of [['conflicted', changes.conflicted], ['staged', changes.staged], ['unstaged', changes.unstaged], ['untracked', changes.untracked], ['ignored', changes.ignored === undefined ? [] : changes.ignored]]) {
+            const forest = buildDirForest(pair[1], pair[0])
+            for (const id of forest.ids) next[id] = true
+          }
+          return next
+        })
+      }
       const [rowMenu, setRowMenu] = useState(null)
       const [discardAsk, setDiscardAsk] = useState(null)
       const anchorRef = useRef(null)
@@ -244,14 +292,15 @@
         { id: 'ignore-file', label: fill(t('menu.ignoreIn'), { file: '.gitignore' }), run: () => { setRowMenu(null); ignoreAdd(item, false) } },
         { id: 'ignore-local', label: fill(t('menu.ignoreIn'), { file: '.git/info/exclude' }), run: () => { setRowMenu(null); ignoreAdd(item, true) } },
       ])
-      /* Directory rows (user request): ignore verbs + copy, no diff/stage.
-         Same card-relative offsets as the row menu above. */
-      const folderMenu = (event, dirPath) => {
+      /* Directory rows (user request): ignore verbs for untracked folders,
+         stage for tracked ones, copy for both. Same card-relative offsets as
+         the row menu above. */
+      const folderMenu = (event, dirPath, group) => {
         const dirItem = { path: dirPath, dir: true }
         const host = event.currentTarget instanceof Element ? event.currentTarget.closest('.git4idea-commit-layer-card') : null
         const rect = host === null ? null : host.getBoundingClientRect()
         setRowMenu({
-          item: dirItem, group: 'untracked', folderOnly: true,
+          item: dirItem, group: group, folderOnly: true,
           x: event.clientX - (rect === null ? 0 : rect.left),
           y: event.clientY - (rect === null ? 0 : rect.top),
           boundsWidth: rect === null ? undefined : Math.round(rect.width),
@@ -260,7 +309,9 @@
       }
       const rowMenuItems = rowMenu === null ? [] : (
         rowMenu.folderOnly === true ? [
-          { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) },
+          rowMenu.group === 'untracked'
+            ? { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) }
+            : { id: 'stage', icon: 'plus', label: t('action.stage'), run: () => { void call('stage', { paths: [rowMenu.item.path] }) } },
           null,
           { id: 'copy', icon: 'tag', label: t('action.copyPath'), run: () => { copyText(rowMenu.item.path) } },
         ] : [
@@ -269,29 +320,63 @@
             : { id: 'stage', icon: 'plus', label: t('action.stage'), run: () => { void call('stage', { paths: [rowMenu.item.path] }) } },
           { id: 'diff', icon: 'diff', label: t('action.showDiff'), run: () => { void openDiff(rowMenu.item, rowMenu.group) } },
           rowMenu.group === 'untracked' ? { id: 'ignore', icon: 'filter', label: t('menu.ignoreTitle'), items: ignoreEntriesOf(rowMenu.item) } : null,
-          null,
           {
             id: 'discard', icon: 'undo', danger: true, label: t('action.discard'),
             run: () => setDiscardAsk({ item: rowMenu.item, group: rowMenu.group }),
           },
         ])
+      const viewMenuItems = [
+        /* 分组 (grouping): multi-select — both on nests module INSIDE nothing,
+           both off reads flat. */
+        { header: true, label: t('changes.groupBy') },
+        { id: 'view-dir', label: t('changes.groupDir'), active: groupModes.has('dir') === true, run: () => toggleGroupMode('dir') },
+        { id: 'view-module', label: t('changes.groupModule'), active: groupModes.has('module') === true, run: () => toggleGroupMode('module') },
+        null,
+        /* 显示 (display): what the list may include. */
+        { header: true, label: t('commit.viewDisplay') },
+        { id: 'view-ignored', label: t('changes.showIgnored'), active: showIgnored === true, run: () => setShowIgnored(showIgnored !== true) },
+      ]
       return E(Fragment, null,
         E('div', { className: 'git4idea-commit-layer-head' },
           E(Icon, { name: 'commit', size: 13 }),
           E('span', { className: 'git4idea-commit-layer-title' }, t('changes.title')),
-          /* View options right after the title (user request), left-aligned —
-             the spacer keeps them off the window controls at the right end. */
-          E('select', {
-            className: 'git4idea-select git4idea-commit-view-select',
-            value: groupBy,
-            'aria-label': t('changes.groupBy'), 'data-tip': t('changes.groupBy'),
-            onChange: (event) => setGroupBy(event.target.value),
-          },
-            E('option', { value: 'flat' }, t('changes.groupFlat')),
-            E('option', { value: 'dir' }, t('changes.groupDir'))),
-          E('label', { className: 'git4idea-check git4idea-commit-view-ignored' },
-            E('input', { type: 'checkbox', checked: showIgnored, onChange: (event) => setShowIgnored(event.target.checked) }),
-            E('span', null, t('changes.showIgnored'))),
+          /* The eye (view options) menu (user request): grouping + display as
+             two labelled sections in one dropdown, anchored under the button. */
+          E('span', { className: 'git4idea-commit-view-wrap', ref: viewMenuRef },
+            E('button', {
+              type: 'button', className: 'git4idea-icon-btn'
+                + (groupModes.size > 0 || showIgnored === true ? ' git4idea-icon-btn-active' : ''),
+              'data-action': 'commit-view',
+              'data-tip': t('commit.viewOptions'),
+              'aria-expanded': viewMenuOpen === true ? 'true' : 'false',
+              onClick: () => setViewMenuOpen(viewMenuOpen !== true),
+            }, E(Icon, { name: 'eye', size: 14 })),
+            viewMenuOpen !== true ? null : E('div', { className: 'git4idea-menu git4idea-menu-sub git4idea-commit-view-menu', 'data-menu-material': 'translucent' },
+              E('div', { className: 'git4idea-menu-scroll' },
+                viewMenuItems.map((item, index) => item === null
+                  ? E('div', { key: 'sep-' + index, className: 'git4idea-menu-sep' })
+                  : item.header === true
+                    ? E('div', { key: 'head-' + index, className: 'git4idea-menu-header' }, item.label)
+                    : E('button', {
+                        key: item.id,
+                        type: 'button',
+                        className: 'git4idea-menu-item' + (item.active === true ? ' git4idea-menu-item-active' : ''),
+                        onClick: () => { item.run(); },
+                      },
+                        E('span', { className: 'git4idea-menu-label' }, item.label),
+                        item.active === true ? E(Icon, { name: 'check', size: 12 }) : null))))),
+          /* 展开全部 / 收起全部 (user request): IntelliJ's ExpandAll/CollapseAll
+             chevron pair — pointing away spreads the tree, pointing in folds it. */
+          E('button', {
+            type: 'button', className: 'git4idea-icon-btn', 'data-action': 'commit-expand',
+            'data-tip': t('changes.expandAll'),
+            onClick: () => setAllFolders(true),
+          }, E(Icon, { name: 'unfoldMore', size: 14 })),
+          E('button', {
+            type: 'button', className: 'git4idea-icon-btn', 'data-action': 'commit-collapse',
+            'data-tip': t('changes.foldAll'),
+            onClick: () => setAllFolders(false),
+          }, E(Icon, { name: 'unfoldLess', size: 14 })),
           E('span', { className: 'git4idea-topbar-spacer' }),
           props.onClose === undefined ? null : E('button', {
             type: 'button', className: 'git4idea-icon-btn', 'data-tip': t('confirm.cancel'),
@@ -301,7 +386,10 @@
             E('div', { className: 'git4idea-commit-layer-left', style: { flex: '0 0 ' + (splitRatio * 100) + '%' } },
               E(ChangesPanel, {
                 t: t, summary: summary, busy: busy, compact: false, hideHeader: true,
-                groupBy: groupBy, sortKey: 'git', onGroupBy: setGroupBy,
+                groupBy: groupModes.has('dir') === true && groupModes.has('module') === true ? 'module'
+                  : groupModes.has('dir') === true ? 'dir'
+                    : groupModes.has('module') === true ? 'module' : 'flat',
+                sortKey: 'git',
                 foldedDirs: foldedDirs, onFoldedDirs: setFoldedDirs,
                 request: request, cwd: entry.cwd, sessionId: entry.sessionId,
                 base: base,

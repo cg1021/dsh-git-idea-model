@@ -354,9 +354,13 @@
       '.git4idea-commit-split::before{content:"";width:2px;margin:8px 3px;border-radius:var(--dsw-radius-xs,4px);background:var(--dsw-alias-border-l2)}',
       '.git4idea-commit-split:hover::before,.git4idea-commit-splitting .git4idea-commit-split::before{background:var(--dsw-alias-state-business-primary,var(--dsw-alias-link))}',
       '.git4idea-commit-splitting{cursor:col-resize;user-select:none}',
-      /* View options in the commit tab head (user request). */
-      '.git4idea-commit-view-select{max-width:120px;height:24px}',
-      '.git4idea-commit-view-ignored{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary);font-size:12px;white-space:nowrap;cursor:pointer}',
+      /* View options in the commit tab head (user request): the eye dropdown
+         anchors under its button, inside the same wrapper. Height/position
+         rules live after the .git4idea-menu block below, so they win the
+         cascade — the shared menu card's max-height resolves `100%` against
+         this short header strip and would collapse the dropdown to nothing. */
+      '.git4idea-commit-view-wrap{position:relative;display:inline-flex;margin-left:10px}',
+      '.git4idea-folder-head .git4idea-group-check{margin-left:2px}',
       '.git4idea-compact-bar{display:flex;align-items:center;gap:6px;padding:4px 6px;flex:none}',
       '.git4idea-compact-tree{max-height:42%;flex:none;border-bottom:1px solid var(--dsw-alias-border-l2)}',
       // A divider: an 8px hit area (a fingertip needs it) painted as a 1px hairline
@@ -696,6 +700,11 @@
       '.git4idea-menu-disabled{opacity:.38;cursor:default}',
       '.git4idea-menu-sep{flex:none;height:1px;margin:3px 6px;background:var(--dsw-alias-hairline,var(--dsw-alias-border-l1))}',
       '.git4idea-menu-header{flex:none;padding:4px 8px 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      /* The commit tab's eye dropdown (user request). These come AFTER the
+         .git4idea-menu block on purpose: the shared card's max-height uses
+         `calc(100% - 8px)`, which inside the short header wrap collapses the
+         dropdown — this card sizes to its rows instead. */
+      '.git4idea-commit-view-menu{position:absolute;top:calc(100% + 4px);left:0;max-height:min(320px,60vh)}',
       /* v0.3.1 (#N2): the directory picker of the path filter. */
       '.git4idea-dialog-tree{width:440px;max-width:88vw}',
       '.git4idea-path-tree{display:flex;flex-direction:column;gap:1px;max-height:300px;overflow:auto;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm,8px);padding:3px}',

@@ -18,6 +18,13 @@
       chevronLeft: [{"d":"m15 6-6 6 6 6"}],
       chevronRight: [{"d":"m9 6 6 6-6 6"}],
       chevronUp: [{"d":"m6 15 6-6 6 6"}],
+      chevronsDown: [{"d":"m7 6 5 5 5-5"},{"d":"m7 13 5 5 5-5"}],
+      chevronsUp: [{"d":"m7 18 5-5 5 5"},{"d":"m7 11 5-5 5 5"}],
+      /* IntelliJ ExpandAll / CollapseAll: two chevrons pointing AWAY from the
+         centre spread the rows apart (expand); pointing INWARD squeeze them
+         back together (collapse). */
+      unfoldMore: [{"d":"m7 9 5-5 5 5"},{"d":"m7 15 5 5 5-5"}],
+      unfoldLess: [{"d":"m7 5 5 5 5-5"},{"d":"m7 19 5-5 5 5"}],
       clock: [{"circle":[12,12,8.5]},{"d":"M12 7.5V12l3 2"}],
       close: [{"d":"M6 6l12 12M18 6 6 18"}],
       collapse: [{"d":"M4 9h5V4M20 15h-5v5M4 4l6 6M20 20l-6-6"}],

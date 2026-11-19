@@ -87,7 +87,7 @@
       // Lifted to the panel (v0.15): the "..." menu drives the same state, so
       // the header toggle and the menu can never disagree. The alias pair keeps
       // the body reads below untouched.
-      const groupBy = props.groupBy === 'dir' ? 'dir' : 'flat'
+      const groupBy = props.groupBy === 'dir' || props.groupBy === 'module' ? props.groupBy : 'flat'
       const setGroupBy = props.onGroupBy
       const sortKey = props.sortKey === undefined ? 'git' : props.sortKey
       /* foldedDirs lifted too (v0.16.1): the header row lost its four buttons —
@@ -314,15 +314,46 @@
         }
         const emitRows = (key, entries) => {
           const sorted = sortedOf(entries)
-          if (groupBy !== 'dir') {
+          if (groupBy !== 'dir' && groupBy !== 'module') {
             for (const item of sorted) out.push({ kind: 'row', key: key + ':' + item.path, h: ITEM_HEIGHTS.row, node: entryRow(key, item) })
             return
           }
+          /* 按模块 (user request): one folder per TOP-LEVEL path segment — the
+             module view of the same forest. "按目录" keeps the full tree. */
           const forest = buildDirForest(sorted, key)
-          /* The label is the chain THIS node adds below its parent (issue
-             #18): a compressed "java/cn/com/pxwk/base" node repeats only the
-             segments below "…/src/main", not the full path from the group
-             root — same convention as the IDE commit tree. */
+          /* Folder tick (user request #4): the checkbox decides the WHOLE
+             subtree's commit pick — checked = every file explicit true,
+             unchecked = every file explicit false, indeterminate = mixed.
+             Descendant folders get explicit false too, so a later refresh of
+             their own files still shows unchecked. */
+          const folderDescendants = (node) => {
+            const files = node.files.slice()
+            for (const child of forest.sortedChildren(node)) files.push(...folderDescendants(child))
+            return files
+          }
+          const folderPickOn = (node) => {
+            const files = folderDescendants(node)
+            let on = 0
+            for (const item of files) { if (pickOn(key, item) === true) on += 1 }
+            return files.length > 0 && on === files.length
+          }
+          const folderPickSome = (node) => {
+            const files = folderDescendants(node)
+            let on = 0
+            for (const item of files) { if (pickOn(key, item) === true) on += 1 }
+            return on > 0 && on < files.length
+          }
+          const toggleFolderPick = (node) => {
+            const on = folderPickOn(node)
+            setGroupPick(key, folderDescendants(node), on === false)
+          }
+          const folderCheck = (node) => E('input', {
+            type: 'checkbox', className: 'git4idea-group-check',
+            checked: folderPickOn(node),
+            ref: (node2) => { if (node2 !== null) node2.indeterminate = folderPickSome(node) },
+            onClick: (event) => { event.stopPropagation() },
+            onChange: () => toggleFolderPick(node),
+          })
           const renderFolder = (node, depth, parentLen) => {
             const id = key + '|' + node.path.join('/')
             const open = foldedDirs[id] !== true
@@ -336,6 +367,7 @@
                    verb list runs against the FULL folder path. */
                 onContextMenu: props.onFolderMenu === undefined ? undefined : (event) => { event.preventDefault(); props.onFolderMenu(event, node.path.join('/'), key) },
               },
+                folderCheck(node),
                 E('span', { className: 'git4idea-chevron' + (open ? ' git4idea-chevron-open' : '') }, E(Icon, { name: 'chevron', size: 10 })),
                 E('span', { className: 'git4idea-row-icon git4idea-tone-accent' }, E(Icon, { name: 'folder', size: 14 })),
                 E('span', { className: 'git4idea-folder-name' }, node.path.slice(typeof parentLen === 'number' ? parentLen : 0).join('/')),
@@ -351,6 +383,36 @@
           /* Root-level files need no synthetic folder: they sit directly
              under the group head, before the real folders. */
           for (const item of sortedOf(forest.rootFiles)) out.push({ kind: 'row', key: key + ':' + item.path, h: ITEM_HEIGHTS.row, node: entryRow(key, item, 0) })
+          if (groupBy === 'module') {
+            /* Compress every module to ONE row: the node's own files and its
+               whole subtree render flat under the module folder. */
+            const flatten = (node) => {
+              const files = node.files.slice()
+              for (const child of forest.sortedChildren(node)) files.push(...flatten(child))
+              return files
+            }
+            for (const node of forest.roots) {
+              const id = key + '|' + node.path.join('/')
+              const open = foldedDirs[id] !== true
+              out.push({
+                kind: 'folder', key: 'folder:' + id, h: ITEM_HEIGHTS.folder,
+                node: E('button', {
+                  type: 'button', className: 'git4idea-folder-head',
+                  onClick: () => setFoldedDirs((previous) => Object.assign({}, previous, { [id]: previous[id] !== true })),
+                  onContextMenu: props.onFolderMenu === undefined ? undefined : (event) => { event.preventDefault(); props.onFolderMenu(event, node.path.join('/'), key) },
+                },
+                  folderCheck(node),
+                  E('span', { className: 'git4idea-chevron' + (open ? ' git4idea-chevron-open' : '') }, E(Icon, { name: 'chevron', size: 10 })),
+                  E('span', { className: 'git4idea-row-icon git4idea-tone-accent' }, E(Icon, { name: 'folder', size: 14 })),
+                  E('span', { className: 'git4idea-folder-name' }, node.path[node.path.length - 1]),
+                  E('span', { className: 'git4idea-count' }, String(forest.countOf(node)))),
+              })
+              if (open === true) {
+                for (const item of sortedOf(flatten(node))) out.push({ kind: 'row', key: key + ':' + item.path, h: ITEM_HEIGHTS.row, node: entryRow(key, item, 0) })
+              }
+            }
+            return
+          }
           for (const node of forest.roots) renderFolder(node, 0)
         }
         const emitGroup = (key, title, entries) => {
