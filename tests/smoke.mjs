@@ -683,6 +683,22 @@ test('the rc.2 surface contract: elevation instead of border plus shadow', () =>
   assert.match(cssRule('.git4idea-overlay'), /backdrop-filter:var\(--dsw-mask-blur,/)
 })
 
+test('the New Session clone chip sits after the mode picker in one type scale', () => {
+  // The host justifies its hero options strip right (margin-left:auto on the
+  // wrapper) and renders every entry through a plain div[data-slot]; the chip
+  // borrows the strip's class only while mounted, so the CSS drops that auto
+  // margin there and keeps the row's left alignment (user request).
+  const chip = cssRule('.git4idea-hero-action')
+  assert.match(chip, /font-size:13px/, 'the chip matches the mode chip type scale (13px/500)')
+  assert.match(chip, /font-weight:500/)
+  assert.match(chip, /line-height:20px/, 'the chip matches the mode chip row height (28px)')
+  assert.match(chip, /height:28px/)
+  assert.doesNotMatch(client, /className: 'git4idea-cs-action', 'data-tip': props\.t\('more\.clone'\)/,
+    'the old 12px popover-row styling is gone from the hero strip')
+  assert.match(client, /\[data-slot="conversation\.hero\.options"\]\s*\._heroOptions\{margin-left:0\}/,
+    'the strip keeps the row alignment only while the chip is mounted')
+})
+
 test('the rc.2 surface contract: one focus colour, radius tokens, round capsules', () => {
   // The theme owns `--dsw-focus-ring-color` / `--dsw-focus-ring-width` and blanks
   // the colour under `html[data-input-modality='pointer']` for everything that is
@@ -787,7 +803,7 @@ test('host half keeps the destructive-confirm guards', () => {
 })
 
 test('host half exposes the method table the client calls', () => {
-  const methods = ['account', 'summary', 'head', 'stats', 'branches', 'log', 'me', 'merge-point', 'commitDetail', 'diff', 'compare', 'dirTree', 'repos', 'stage', 'unstage', 'discard', 'commit', 'checkout', 'branchCreate', 'branchRename', 'branch-upstream', 'branchDelete', 'merge', 'rebase', 'cherryPick', 'revert', 'reset', 'fetch', 'pull', 'push', 'stashList', 'stashPush', 'stashApply', 'stashDrop', 'tagCreate', 'tagDelete', 'tagDeleteRemote', 'pushTags', 'clone', 'gitLogs', 'consoleLog', 'consoleClear', 'worktreeList', 'worktreeAdd', 'worktreeRemove', 'remoteAdd', 'remoteRemove', 'branchDeleteRemote', 'rebaseAbort', 'stashClear', 'undoList', 'undoApply', 'conflictDetail', 'conflictSave', 'conflictResolve', 'conflictBlame', 'operationFinish', 'version']
+  const methods = ['account', 'summary', 'head', 'stats', 'branches', 'log', 'me', 'merge-point', 'commitDetail', 'diff', 'compare', 'refDiff', 'dirTree', 'repos', 'stage', 'unstage', 'discard', 'commit', 'checkout', 'branchCreate', 'branchRename', 'branch-upstream', 'branchDelete', 'merge', 'rebase', 'cherryPick', 'revert', 'reset', 'fetch', 'pull', 'push', 'stashList', 'stashPush', 'stashApply', 'stashDrop', 'tagCreate', 'tagDelete', 'tagDeleteRemote', 'pushTags', 'clone', 'gitLogs', 'consoleLog', 'consoleClear', 'worktreeList', 'worktreeAdd', 'worktreeRemove', 'remoteAdd', 'remoteRemove', 'branchDeleteRemote', 'rebaseAbort', 'stashClear', 'undoList', 'undoApply', 'conflictDetail', 'conflictSave', 'conflictResolve', 'conflictBlame', 'operationFinish', 'version']
   for (const method of methods) {
     if (method === 'merge-point') { assert.match(host, /^  'merge-point': mergePoint,$/m, 'host method missing: merge-point'); continue }
     if (method === 'branch-upstream') { assert.match(host, /^  'branch-upstream': branchUpstream,$/m, 'host method missing: branch-upstream'); continue }
@@ -1025,7 +1041,7 @@ test('the client half is fragments plus one generated bundle (m05309)', () => {
   // the bundle" from drifting apart.
   const order = [
     'head.js', 'locale.js', 'ui/icons.js', 'core.js', 'diff.js', 'tree.js', 'changes.js',
-    'workbench.js', 'account.js', 'panel.js', 'styles.js', 'composer.js', 'dialogs.js', 'preview.js', 'conflict.js',
+    'compare-view.js', 'workbench.js', 'account.js', 'panel.js', 'styles.js', 'composer.js', 'dialogs.js', 'preview.js', 'conflict.js',
     'ui/theme.js', 'ui/components.js', 'app.js',
   ]
   const names = []
@@ -2234,4 +2250,19 @@ test('the push dialog previews its commits and the file card floats (m02986)', (
     const occurrences = client.split("'" + key + "'").length - 1
     assert.ok(occurrences >= 2, key + ' must ship in both shipped dictionaries (saw ' + occurrences + ')')
   }
+
+  // The card opens with the remote branch named like the pushed local one
+  // (user request), whatever the configured upstream says.
+  assert.match(host, /if \(remoteBranch === ''\) remoteBranch = branch/,
+    'the default destination follows the pushed local branch name')
+
+  // 提交并推送 refreshes the commit tab when the push lands (user request):
+  // the shell-less card reloads through the same watcher a branch switch
+  // rides, and only a shell-mounted card closes itself.
+  const commitCard = client.slice(client.indexOf('const commit = (message, amend, push, paths)'), client.indexOf("const stagedPaths = () => (summary === null ? [] : summary.changes.staged.map((item) => item.path))"))
+  assert.ok(commitCard.length > 200, 'the commit card block must be found whole')
+  assert.match(commitCard, /if \(props\.onClose !== undefined\) props\.onClose\(\)/,
+    'the commit tab mounts the card without a shell: a landed commit must not call its undefined onClose')
+  assert.match(commitCard, /composerBranchWatchers\.add\(onChanged\)/,
+    'the card reloads when the push dialog reports its landing')
 })

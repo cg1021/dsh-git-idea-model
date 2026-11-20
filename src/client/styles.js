@@ -386,6 +386,16 @@
       '.git4idea-input{width:100%;box-sizing:border-box;padding:4px 6px;border-radius:var(--dsw-radius-sm,8px);border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;outline:none}',
       '.git4idea-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.git4idea-input:focus{border-color:var(--dsw-alias-state-business-primary,var(--dsw-alias-brand-primary))}',
+      '.git4idea-clone-hint{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.45}',
+      /* The hero clone chip matches the mode picker's type scale — the host
+         ships 13px/500, line-height 20px, min-height 28px, padding 0 8px for
+         its .workspace/.seat chips — so the strip reads as one row of controls.
+         The strip div carries margin-left:auto (the host justifies its options
+         right); this entry sits after the mode picker, so its mount drops that
+         margin and the whole strip keeps the row's left alignment. */
+      '[data-slot="conversation.hero.options"] ._heroOptions{margin-left:0}',
+      '.git4idea-hero-action{display:inline-flex;align-items:center;flex:none;gap:4px;height:28px;padding:0 8px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:20px;white-space:nowrap;cursor:pointer}',
+      '.git4idea-hero-action:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.git4idea-input-compact{padding:3px 6px}',
       '.git4idea-picker{display:flex;flex-direction:column;gap:2px;padding:12px;overflow:auto;flex:1;min-height:0}',
       '.git4idea-picker-title{color:var(--dsw-alias-label-primary);margin-bottom:2px}',
@@ -674,6 +684,22 @@
       '.git4idea-wt-pathrow .git4idea-input{flex:1;min-width:0}',
       '.git4idea-wt-hint{color:var(--dsw-alias-label-tertiary);font-size:calc(11px + var(--dsh-content-font-delta-secondary, 0px));word-break:break-all}',
       '.git4idea-wt-dialog .git4idea-input{width:100%;box-sizing:border-box}',
+      /* Compare page: two ref pickers on top, a file list beside the shared
+         LineDiff below. Both panes scroll on their own. */
+      '.git4idea-cmp{display:flex;flex-direction:column;height:100%;min-height:0}',
+      '.git4idea-cmp-top{display:flex;align-items:flex-end;gap:8px;padding:8px 10px;flex:none;border-bottom:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle))}',
+      '.git4idea-cmp-field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}',
+      '.git4idea-cmp-field-label{color:var(--dsw-alias-label-secondary);font-size:calc(11px + var(--dsh-content-font-delta-secondary, 0px))}',
+      '.git4idea-cmp-top .git4idea-btn-primary{flex:none}',
+      '.git4idea-cmp-error{padding:6px 10px;color:var(--dsw-alias-state-error,var(--dsw-alias-state-danger));font-size:12px;flex:none}',
+      '.git4idea-cmp-body{display:flex;flex:1;min-height:0}',
+      '.git4idea-cmp-files{width:220px;flex:none;overflow:auto;border-right:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle));padding:4px 0}',
+      '.git4idea-cmp-file{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;padding:4px 8px;cursor:pointer}',
+      '.git4idea-cmp-file:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.git4idea-cmp-file-active{background:var(--dsw-alias-interactive-bg-selected,var(--dsw-alias-interactive-bg-hover));border-left-color:var(--dsw-alias-brand-primary)}',
+      '.git4idea-cmp-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:calc(12px + var(--dsh-content-font-delta-secondary, 0px))}',
+      '.git4idea-cmp-file-counts{display:flex;gap:8px;font-size:11px}',
+      '.git4idea-cmp-diff{flex:1;min-width:0;overflow:auto}',
       '.git4idea-dialog-wide{min-width:min(360px,92%)}',
       '.git4idea-dialog-text{color:var(--dsw-alias-label-secondary);white-space:pre-wrap}',
       '.git4idea-dialog-actions{display:flex;justify-content:flex-end;gap:8px}',

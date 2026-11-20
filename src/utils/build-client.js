@@ -32,6 +32,7 @@ export const FRAGMENT_ORDER = [
   'diff.js',
   'tree.js',
   'changes.js',
+  'compare-view.js',
   'workbench.js',
   'account.js',
   'panel.js',

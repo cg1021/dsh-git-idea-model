@@ -457,6 +457,11 @@ test('branch and tag lifecycle works and compare reports the delta', async () =>
   const compared = await call('compare', { cwd: repo, base: 'main', head: 'feature' })
   assert.deepEqual(compared.body.data.files.map((file) => file.path), ['c.txt'])
   assert.equal(compared.body.data.commits.length, 1)
+  const ref = await call('refDiff', { cwd: repo, base: 'main', head: 'feature' })
+  assert.equal(ref.body.data.base, 'main')
+  assert.equal(ref.body.data.head, 'feature')
+  assert.ok(ref.body.data.files.some((file) => file.path === 'c.txt'), 'two-dot diff lists the branch file')
+  assert.ok(typeof ref.body.data.patch === 'string' && ref.body.data.patch.indexOf('diff --git ') >= 0, 'patch is a unified diff')
 })
 
 test('stash push / list / apply / drop round-trips', async () => {

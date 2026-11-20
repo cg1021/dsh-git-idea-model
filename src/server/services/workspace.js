@@ -228,7 +228,12 @@ export async function pushPreview(payload) {
   const upstream = configuredExists ? remote + '/' + configuredBranch : null
   const upstreamGone = configuredBranch !== '' && configuredExists === false ? remote + '/' + configuredBranch : null
   let remoteBranch = requestedDest
-  if (remoteBranch === '') remoteBranch = configuredExists ? configuredBranch : branch
+  /* The card opens with the remote branch named like the pushed local one
+     (user request), unconditionally: a configured upstream that still names a
+     different remote branch must not drag the default away from the branch
+     being pushed. The mapping stays visible in the card and the stale upstream
+     is reported as upstreamGone-style state above, so m00005 keeps its guard. */
+  if (remoteBranch === '') remoteBranch = branch
   const remoteExists = detached ? false : await existsOnRemote(remoteBranch)
   let commits = []
   let truncated = false

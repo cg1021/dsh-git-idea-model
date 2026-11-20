@@ -365,13 +365,22 @@ window.__ModuleLoader__.load({
       'more.sortPath': '按路径',
       'more.sortName': '按名称',
       'more.sortStatus': '按状态',
-      'more.clone': '克隆...',
+      'more.clone': '克隆仓库',
       'more.stashPop': '弹出最近贮藏',
       'more.deleteTag': '删除标签...',
       'tab.commit': '提交',
       'tab.log': '日志',
       'tab.console': '控制台',
       'tab.worktree': '工作树',
+      'tab.compare': '比较',
+      'cmp.base': '基准(左侧)',
+      'cmp.head': '对比(右侧)',
+      'cmp.swap': '交换两侧',
+      'cmp.run': '比较',
+      'cmp.tag': '标签',
+      'cmp.empty': '选择两个分支或标签后点击比较',
+      'cmp.same': '两个引用没有文件差异',
+      'cmp.unnamed': '(未命名文件)',
       'console.empty': '暂无 Git 命令记录',
       'console.truncated': '只显示最近 256 KiB,更早的记录在 {file}',
       'console.clear': '全部清空日志',
@@ -400,6 +409,7 @@ window.__ModuleLoader__.load({
       'clone.title': '克隆仓库',
       'clone.url': '仓库 URL',
       'clone.dir': '目标目录(绝对路径)',
+      'clone.hint': '克隆后会自动添加为工作区并打开。',
       'clone.run': '克隆',
       'prompt.deleteTag': '要删除的标签名',
       'toolbar.newBranch': '新建分支',
@@ -884,13 +894,22 @@ window.__ModuleLoader__.load({
       'more.sortPath': 'By path',
       'more.sortName': 'By name',
       'more.sortStatus': 'By status',
-      'more.clone': 'Clone...',
+      'more.clone': 'Clone repository',
       'more.stashPop': 'Pop latest stash',
       'more.deleteTag': 'Delete tag...',
       'tab.commit': 'Commit',
       'tab.log': 'Log',
       'tab.console': 'Console',
       'tab.worktree': 'Worktrees',
+      'tab.compare': 'Compare',
+      'cmp.base': 'Base (left)',
+      'cmp.head': 'Head (right)',
+      'cmp.swap': 'Swap sides',
+      'cmp.run': 'Compare',
+      'cmp.tag': 'tag',
+      'cmp.empty': 'Pick two branches or tags, then compare',
+      'cmp.same': 'The two refs have no file differences',
+      'cmp.unnamed': '(unnamed file)',
       'console.empty': 'No git commands yet',
       'console.truncated': 'Showing the last 256 KiB; older records are in {file}',
       'console.clear': 'Clear all log',
@@ -919,6 +938,7 @@ window.__ModuleLoader__.load({
       'clone.title': 'Clone repository',
       'clone.url': 'Repository URL',
       'clone.dir': 'Target directory (absolute path)',
+      'clone.hint': 'The clone is added as a workspace and opened automatically.',
       'clone.run': 'Clone',
       'prompt.deleteTag': 'Tag name to delete',
       'toolbar.newBranch': 'New branch',
@@ -3460,7 +3480,15 @@ window.__ModuleLoader__.load({
     function LineDiff(props) {
       const t = props.t
       const files = useMemo(() => splitPatchFiles(props.patch), [props.patch])
-      const [active, setActive] = useState(0)
+      /* The compare page drives the picked file from its own list. When
+         activeIndex/onActiveChange are supplied the selector is controlled;
+         every other caller keeps the original self-managed state. */
+      const [ownActive, setOwnActive] = useState(0)
+      const active = props.activeIndex === undefined ? ownActive : props.activeIndex
+      const setActive = (value) => {
+        if (typeof props.onActiveChange === 'function') props.onActiveChange(value)
+        else setOwnActive(value)
+      }
       const [prefs, setPrefs] = useState(readLineDiffPrefs)
       useEffect(() => { writeLineDiffPrefs(prefs) }, [prefs])
       const [menuOpen, setMenuOpen] = useState(false)
@@ -6474,6 +6502,128 @@ window.__ModuleLoader__.load({
         E('div', { className: 'git4idea-detail-files' }, fileRows))
     }
 
+    /* ============================== compare page ============================== */
+    /* IDEA's "Compare with Branch/Tag", generalized to two arbitrary refs.
+       The workbench hosts this as its last tab. It owns two ref pickers and a
+       two-pane layout: a file list on the left, the shared LineDiff on the
+       right. The server's refDiff is a plain two-dot tree diff, so both panes
+       describe the same "base -> head" comparison. */
+
+    function compareRefOptions(branches, current) {
+      const bag = branches === null || branches === undefined ? {} : branches
+      const local = Array.isArray(bag.local) ? bag.local : []
+      const tags = Array.isArray(bag.tags) ? bag.tags : []
+      const out = []
+      const seen = new Set()
+      const push = (name, group) => {
+        if (typeof name !== 'string' || name === '' || seen.has(name)) return
+        seen.add(name)
+        out.push({ name: name, group: group })
+      }
+      /* Current branch first, then the rest, so the default pair is useful. */
+      if (typeof current === 'string' && current !== '') push(current, 'local')
+      for (const entry of local) push(entry.name, 'local')
+      for (const entry of tags) push(entry.name, 'tag')
+      return out
+    }
+
+    function CompareView(props) {
+      const t = props.t
+      const request = props.request
+      const base = props.base
+      const refs = useMemo(() => compareRefOptions(props.branches, props.branch), [props.branches, props.branch])
+      const [left, setLeft] = useState('')
+      const [right, setRight] = useState('')
+      const [data, setData] = useState(null)
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState(null)
+      const [active, setActive] = useState(0)
+
+      /* Seed the two pickers when refs first arrive or the repository changes:
+         left = current branch, right = the first different ref. */
+      useEffect(() => {
+        if (refs.length === 0) return
+        setLeft((now) => (refs.some((entry) => entry.name === now) ? now : (refs[0].name)))
+        setRight((now) => (refs.some((entry) => entry.name === now) ? now : (refs.length > 1 ? refs[1].name : refs[0].name)))
+      }, [props.repoRoot, refs])
+
+      const run = useCallback(async (a, b) => {
+        if (a === '' || b === '') return
+        setBusy(true)
+        setError(null)
+        try {
+          const result = await request('refDiff', Object.assign({}, base, { base: a, head: b }))
+          setData(result === undefined ? null : result)
+          setActive(0)
+        } catch (caught) {
+          setData(null)
+          setError(caught instanceof Error ? caught.message : String(caught))
+        } finally {
+          setBusy(false)
+        }
+      }, [request, base])
+
+      const refreshKey = props.refreshKey === undefined ? null : props.refreshKey
+      const lastRefresh = useRef(refreshKey)
+      useEffect(() => {
+        if (refreshKey === null || lastRefresh.current === refreshKey) return
+        lastRefresh.current = refreshKey
+        if (left !== '' && right !== '') void run(left, right)
+      }, [refreshKey, left, right, run])
+
+      const swap = () => { setLeft(right); setRight(left) }
+      const files = useMemo(() => splitPatchFiles(data === null || data === undefined ? '' : data.patch), [data])
+
+      const picker = (value, setter, label) => E('label', { className: 'git4idea-cmp-field' },
+        E('span', { className: 'git4idea-cmp-field-label' }, label),
+        E('select', {
+          className: 'git4idea-input', value: value,
+          onChange: (event) => setter(event.target.value),
+        }, refs.length === 0
+          ? E('option', { value: '' }, '—')
+          : refs.map((entry) => E('option', { key: entry.name, value: entry.name },
+            entry.group === 'tag' ? entry.name + '  (' + t('cmp.tag') + ')' : entry.name))))
+
+      return E('div', { className: 'git4idea-cmp' },
+        E('div', { className: 'git4idea-cmp-top' },
+          picker(left, setLeft, t('cmp.base')),
+          E('button', {
+            type: 'button', className: 'git4idea-icon-btn', 'data-tip': t('cmp.swap'),
+            disabled: left === '' || right === '', onClick: swap,
+          }, E(Icon, { name: 'compare', size: 15 })),
+          picker(right, setRight, t('cmp.head')),
+          E('button', {
+            type: 'button', className: 'git4idea-btn git4idea-btn-primary',
+            disabled: busy === true || left === '' || right === '' || left === right,
+            onClick: () => { void run(left, right) },
+          }, t('cmp.run'))),
+        error === null ? null : E('div', { className: 'git4idea-cmp-error' }, error),
+        E('div', { className: 'git4idea-cmp-body' },
+          E('div', { className: 'git4idea-cmp-files' },
+            data === null || data === undefined
+              ? E('div', { className: 'git4idea-empty' }, busy === true ? t('status.loading') : t('cmp.empty'))
+              : files.length === 0
+                ? E('div', { className: 'git4idea-empty' }, t('cmp.same'))
+                : files.map((file, index) => E('button', {
+                    key: file.path + '#' + index,
+                    type: 'button',
+                    className: 'git4idea-cmp-file' + (index === active ? ' git4idea-cmp-file-active' : ''),
+                    'data-tip': file.path,
+                    onClick: () => setActive(index),
+                  },
+                    E('span', { className: 'git4idea-cmp-file-name', 'data-tip': file.path }, file.path === '' ? t('cmp.unnamed') : file.path),
+                    E('span', { className: 'git4idea-cmp-file-counts' },
+                      E('span', { className: 'git4idea-lf-added' }, '+' + String(file.adds)),
+                      E('span', { className: 'git4idea-lf-deleted' }, '\u2212' + String(file.dels)))))),
+          E('div', { className: 'git4idea-cmp-diff' },
+            data === null || data === undefined || files.length === 0
+              ? null
+              : E(LineDiff, {
+                  t: t, patch: data.patch,
+                  activeIndex: active < files.length ? active : 0,
+                  onActiveChange: setActive,
+                }))))
+    }
 /**
  * dsh-git4idea — client / workbench (commit · log · console · worktree tabs).
  *
@@ -6842,7 +6992,12 @@ function Workbench(props) {
         type: 'button', role: 'tab', className: 'git4idea-tab', 'data-action': 'tab-worktree',
         'data-active': tab === 'worktree' ? 'true' : 'false',
         onClick: () => setTab('worktree'),
-      }, t('tab.worktree'))),
+      }, t('tab.worktree')),
+      E('button', {
+        type: 'button', role: 'tab', className: 'git4idea-tab', 'data-action': 'tab-compare',
+        'data-active': tab === 'compare' ? 'true' : 'false',
+        onClick: () => setTab('compare'),
+      }, t('tab.compare'))),
     /* The branch bar rides below the tab strip (m00174); the panel hands it in
        so the two rows keep one React owner. */
     props.topBar === undefined ? null : props.topBar,
@@ -6855,6 +7010,12 @@ function Workbench(props) {
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('log') }, props.children),
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('console') }, consolePane),
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('worktree') }, worktreePane),
+    E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('compare') },
+      E(CompareView, {
+        t: t, request: request, base: base,
+        branches: props.branches, branch: branch, repoRoot: props.repoRoot,
+        refreshKey: props.consoleTick,
+      })),
     creating === true ? E(WorktreeDialog, {
       t: t, branches: props.branches, branch: branch, repoRoot: props.repoRoot,
       pickDirectory: props.pickDirectory,
@@ -8048,7 +8209,16 @@ function Workbench(props) {
 
       const checkout = useCallback(async (entry) => {
         if (entry.tag === true) { void run('checkout', { branch: entry.name }); return }
-        if (entry.remote === true) { void run('checkout', { branch: entry.name.slice(entry.name.indexOf('/') + 1) }); return }
+        /* A remote ref is checked out as a LOCAL branch of the same name,
+           created from that ref with tracking in one step. Never switch to a
+           stale local twin: IDEA's "Checkout" on origin/foo always yields a
+           branch named foo pointing at origin/foo. */
+        if (entry.remote === true) {
+          const slash = entry.name.indexOf('/')
+          const local = slash >= 0 ? entry.name.slice(slash + 1) : entry.name
+          void run('checkout', { branch: local, create: true, startPoint: entry.name, track: true })
+          return
+        }
         void run('checkout', { branch: entry.name })
       }, [run])
 
@@ -10297,6 +10467,16 @@ function Workbench(props) {
       '.git4idea-input{width:100%;box-sizing:border-box;padding:4px 6px;border-radius:var(--dsw-radius-sm,8px);border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;outline:none}',
       '.git4idea-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.git4idea-input:focus{border-color:var(--dsw-alias-state-business-primary,var(--dsw-alias-brand-primary))}',
+      '.git4idea-clone-hint{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.45}',
+      /* The hero clone chip matches the mode picker's type scale — the host
+         ships 13px/500, line-height 20px, min-height 28px, padding 0 8px for
+         its .workspace/.seat chips — so the strip reads as one row of controls.
+         The strip div carries margin-left:auto (the host justifies its options
+         right); this entry sits after the mode picker, so its mount drops that
+         margin and the whole strip keeps the row's left alignment. */
+      '[data-slot="conversation.hero.options"] ._heroOptions{margin-left:0}',
+      '.git4idea-hero-action{display:inline-flex;align-items:center;flex:none;gap:4px;height:28px;padding:0 8px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:20px;white-space:nowrap;cursor:pointer}',
+      '.git4idea-hero-action:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.git4idea-input-compact{padding:3px 6px}',
       '.git4idea-picker{display:flex;flex-direction:column;gap:2px;padding:12px;overflow:auto;flex:1;min-height:0}',
       '.git4idea-picker-title{color:var(--dsw-alias-label-primary);margin-bottom:2px}',
@@ -10585,6 +10765,22 @@ function Workbench(props) {
       '.git4idea-wt-pathrow .git4idea-input{flex:1;min-width:0}',
       '.git4idea-wt-hint{color:var(--dsw-alias-label-tertiary);font-size:calc(11px + var(--dsh-content-font-delta-secondary, 0px));word-break:break-all}',
       '.git4idea-wt-dialog .git4idea-input{width:100%;box-sizing:border-box}',
+      /* Compare page: two ref pickers on top, a file list beside the shared
+         LineDiff below. Both panes scroll on their own. */
+      '.git4idea-cmp{display:flex;flex-direction:column;height:100%;min-height:0}',
+      '.git4idea-cmp-top{display:flex;align-items:flex-end;gap:8px;padding:8px 10px;flex:none;border-bottom:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle))}',
+      '.git4idea-cmp-field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}',
+      '.git4idea-cmp-field-label{color:var(--dsw-alias-label-secondary);font-size:calc(11px + var(--dsh-content-font-delta-secondary, 0px))}',
+      '.git4idea-cmp-top .git4idea-btn-primary{flex:none}',
+      '.git4idea-cmp-error{padding:6px 10px;color:var(--dsw-alias-state-error,var(--dsw-alias-state-danger));font-size:12px;flex:none}',
+      '.git4idea-cmp-body{display:flex;flex:1;min-height:0}',
+      '.git4idea-cmp-files{width:220px;flex:none;overflow:auto;border-right:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle));padding:4px 0}',
+      '.git4idea-cmp-file{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;padding:4px 8px;cursor:pointer}',
+      '.git4idea-cmp-file:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.git4idea-cmp-file-active{background:var(--dsw-alias-interactive-bg-selected,var(--dsw-alias-interactive-bg-hover));border-left-color:var(--dsw-alias-brand-primary)}',
+      '.git4idea-cmp-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:calc(12px + var(--dsh-content-font-delta-secondary, 0px))}',
+      '.git4idea-cmp-file-counts{display:flex;gap:8px;font-size:11px}',
+      '.git4idea-cmp-diff{flex:1;min-width:0;overflow:auto}',
       '.git4idea-dialog-wide{min-width:min(360px,92%)}',
       '.git4idea-dialog-text{color:var(--dsw-alias-label-secondary);white-space:pre-wrap}',
       '.git4idea-dialog-actions{display:flex;justify-content:flex-end;gap:8px}',
@@ -11091,6 +11287,26 @@ function Workbench(props) {
       },
     }
 
+    /* The clone card is raised from the New Session row's workspace options.
+       Same frame-overlay rule as the prompt: the hero picker lives under a
+       contain:layout ancestor, so the URL + directory form portals to the
+       shell overlay instead of opening under the row. */
+    const cloneDialog = {
+      entry: null,
+      hosted: false,
+      listeners: new Set(),
+      set(entry) {
+        cloneDialog.entry = entry
+        for (const listener of Array.from(cloneDialog.listeners)) {
+          try { listener() } catch (error) { void error }
+        }
+      },
+      subscribe(listener) {
+        cloneDialog.listeners.add(listener)
+        return () => { cloneDialog.listeners.delete(listener) }
+      },
+    }
+
     /* Destructive confirms raised by the composer pill follow the same rule:
        the pill sits in a dock container with `contain: layout`, so a card
        mounted beside it is clipped to the composer strip (reported against the
@@ -11209,6 +11425,96 @@ function Workbench(props) {
       })
     }
 
+    /* The chip in the New Session row's options strip, after the mode picker.
+       It borrows the strip's `_heroOptions` class so the frame CSS can drop the
+       host's right-justifying auto margin while the entry is mounted, and it
+       matches the mode chip's own type scale (13px/500, 28px row — the specs
+       the host ships for .workspace/.seat). Only action is to raise the
+       centered clone card; the overlay host owns the rest. */
+    function CloneOption(props) {
+      return E('button', {
+        type: 'button', className: 'git4idea-hero-action _heroOptions', 'data-tip': props.t('more.clone'),
+        onClick: () => { cloneDialog.set({}) },
+      },
+        E(Icon, { name: 'plus', size: 16 }), E('span', null, props.t('more.clone')))
+    }
+
+    /* Frame-wide clone card, raised from the New Session workspace options.
+       The two fields are the remote URL and the local directory, the same
+       shape as the panel's Clone dialog (IDEA Clone repository). Clone first,
+       then adopt the directory as a Workspace and open it, so the new session
+       points at the freshly cloned checkout. */
+    function FrameCloneDialog(props) {
+      const [url, setUrl] = useState('')
+      const [dir, setDir] = useState('')
+      const [busy, setBusy] = useState(false)
+      const ref = useRef(null)
+      useEffect(() => { if (ref.current !== null) ref.current.focus() }, [])
+      const ready = url.trim() !== '' && dir.trim() !== '' && busy === false
+      const submit = () => {
+        if (ready !== true) return
+        setBusy(true)
+        void (async () => {
+          try {
+            const target = dir.trim()
+            await request('clone', { url: url.trim(), dir: target })
+            const workspaces = props.ctx.get('workspaces')
+            const uiWorkspace = props.ctx.get('uiWorkspace')
+            let workspaceId = null
+            if (workspaces !== undefined && workspaces !== null && typeof workspaces.create === 'function') {
+              const created = await workspaces.create({ path: target })
+              workspaceId = created === null || created === undefined ? null : created.workspaceId
+            }
+            props.onClose()
+            notifyOk(props.t('toast.cloned'))
+            if (workspaceId !== null && uiWorkspace !== undefined && uiWorkspace !== null && typeof uiWorkspace.openWorkspace === 'function') {
+              void uiWorkspace.openWorkspace(workspaceId).catch((caught) => notifyFail(caught))
+            }
+          } catch (caught) {
+            notifyFail(caught)
+          } finally {
+            setBusy(false)
+          }
+        })()
+      }
+      const onKey = (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); submit() }
+        if (event.key === 'Escape') { event.preventDefault(); if (busy !== true) props.onClose() }
+      }
+      return E('div', {
+        className: 'git4idea-commit-overlay git4idea-prompt-overlay',
+        'data-git4idea-clone': '',
+        onMouseDown: (event) => { if (event.target === event.currentTarget && busy !== true) props.onClose() },
+      },
+        E('div', { className: 'git4idea-dialog git4idea-prompt-card' },
+          E('div', { className: 'git4idea-dialog-title' }, props.t('clone.title')),
+          E('div', { className: 'git4idea-clone-hint' }, props.t('clone.hint')),
+          E('input', {
+            ref: ref, className: 'git4idea-input', value: url, spellCheck: false,
+            placeholder: props.t('clone.url'), onChange: (event) => setUrl(event.target.value), onKeyDown: onKey,
+          }),
+          E('input', {
+            className: 'git4idea-input', value: dir, spellCheck: false,
+            placeholder: props.t('clone.dir'), onChange: (event) => setDir(event.target.value), onKeyDown: onKey,
+          }),
+          E('div', { className: 'git4idea-dialog-actions' },
+            E('button', { type: 'button', className: 'git4idea-btn', onClick: props.onClose }, props.t('confirm.cancel')),
+            E('button', { type: 'button', className: 'git4idea-btn git4idea-btn-primary', disabled: ready === false, onClick: submit }, props.t('clone.run')))))
+    }
+
+    function CloneDialogHost(props) {
+      const [entry, setEntry] = useState(cloneDialog.entry)
+      useEffect(() => {
+        const sync = () => setEntry(cloneDialog.entry)
+        sync()
+        const off = cloneDialog.subscribe(sync)
+        cloneDialog.hosted = true
+        return () => { cloneDialog.hosted = false; off() }
+      }, [])
+      if (entry === null) return null
+      return E(FrameCloneDialog, { key: 'clone', t: props.t, ctx: props.ctx, onClose: () => cloneDialog.set(null) })
+    }
+
     function GitDialogHost(props) {
       const [entry, setEntry] = useState(commitDialog.entry)
       const [pushEntry, setPushEntry] = useState(pushDialog.entry)
@@ -11282,7 +11588,8 @@ function Workbench(props) {
           onClose: () => { conflictDialog.set(null) },
         })),
         E(PromptDialogHost, null),
-        E(ConfirmDialogHost, { t: props.t }))
+        E(ConfirmDialogHost, { t: props.t }),
+        E(CloneDialogHost, { t: props.t, ctx: props.ctx }))
     }
 
     /* The frame-wide commit card (the composer pill's 提交 verb) wraps the same
@@ -11463,7 +11770,9 @@ function Workbench(props) {
          refresh; a rejected one reports in the bottom-right stack.
          ChangesPanel has already cleared its draft by the time this returns.
          m02986: the push is a second, explicit step — hand over to the push
-         dialog only after the commit route reports success. */
+         dialog only after the commit route reports success. The commit tab
+         mounts this card without a shell (no onClose prop): there the card
+         stays open and the branch notification below reloads its list. */
       const commit = (message, amend, push, paths) => {
         void (async () => {
           setBusy(true)
@@ -11476,13 +11785,23 @@ function Workbench(props) {
             try { notifyBranchSwitched(entry.sessionId, entry.repoRoot) } catch (caught) { void caught }
             toastCenter.push({ text: t('toast.committed'), tone: 'ok', icon: 'check' })
             if (push === true) pushDialog.set({ cwd: entry.cwd, repoRoot: entry.repoRoot, sessionId: entry.sessionId })
-            props.onClose()
+            if (props.onClose !== undefined) props.onClose()
           } catch (caught) {
             notifyFail(caught)
             setBusy(false)
           }
         })()
       }
+      /* The commit tab's card has no dialog shell, so nothing closed over it.
+         The same watcher that follows a branch switch reloads the summary: the
+         push dialog opened from 提交并推送 reports its landing through it, and
+         this page refreshes the moment that card closes (user request). */
+      useEffect(() => {
+        const onChanged = () => { void loadSummary() }
+        composerBranchWatchers.add(onChanged)
+        return () => { composerBranchWatchers.delete(onChanged) }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [entry.cwd, entry.repoRoot])
       /* No Escape handler: the card is frame-anchored only through the dialog
          shell; the commit tab keeps it mounted and must not be closed by a key. */
       const stagedPaths = () => (summary === null ? [] : summary.changes.staged.map((item) => item.path))
@@ -14903,11 +15222,31 @@ function Workbench(props) {
             pushDialog.set(null)
             conflictDialog.set(null)
             conflictOverviewDialog.set(null)
+            cloneDialog.set(null)
             try { offCommit() } catch (error) { void error }
             try { offFile() } catch (error) { void error }
 
           }
         }, 'dsh-git4idea: commit, file and push overlays')
+      })
+
+      /* ---- New Session row: clone repository (user request) ---- */
+      /* The hero's workspace picker has an "Add workspace" row, but there is no
+         extension slot on that menu. A dedicated option beside it gives the
+         clone gesture a first-class home on the New Session page: URL + local
+         directory, then adopt the clone as a Workspace and open it. */
+      ctx.inject(['slots'], (cloneCtx) => {
+        const cloneSlots = cloneCtx.get('slots')
+        if (cloneSlots === undefined || cloneSlots === null || typeof cloneSlots.inject !== 'function') return
+        cloneCtx.effect(() => {
+          const off = cloneSlots.inject('conversation.hero.options', () => cloneSlots.register(
+            { name: 'conversation.hero.options', id: 'dsh-git4idea:clone', order: 10, locale: LOCALE_NS, label: () => t('more.clone') },
+            () => E(CloneOption, { t: t, ctx: ctx }),
+          ))
+          return () => {
+            try { off() } catch (error) { void error }
+          }
+        }, 'dsh-git4idea: new-session clone option')
       })
 
       /* ---- session-switch prewarm ---- */
