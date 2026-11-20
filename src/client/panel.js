@@ -950,6 +950,29 @@
         void run('checkout', { branch: entry.name })
       }, [run])
 
+      /* 更新 (Update): the checked-out branch is pulled ff-only; any other
+         local branch is fast-forwarded in place by a refspec fetch, which git
+         refuses to move backwards. Mirrors the composer pill's updateBranch so
+         the branch chooser and the pill behave identically. */
+      const updateBranch = useCallback(async (entry) => {
+        if (entry.head === true) { await run('pull', { mode: 'ff-only' }); return }
+        const upstream = entry.upstream === null || entry.upstream === undefined ? '' : String(entry.upstream)
+        const slash = upstream.indexOf('/')
+        const remote = slash > 0 ? upstream.slice(0, slash) : 'origin'
+        const remoteBranch = slash > 0 ? upstream.slice(slash + 1) : entry.name
+        await run('fetch', { remote: remote, branch: remoteBranch + ':' + entry.name })
+      }, [run])
+
+      /* A remote row's fetch pulls just that ref into its tracking ref
+         (`git fetch origin feature` refreshes refs/remotes/origin/feature),
+         keeping the chooser on the fresh state. */
+      const fetchRemoteBranch = useCallback(async (entry) => {
+        const slash = entry.name.indexOf('/')
+        const remote = slash > 0 ? entry.name.slice(0, slash) : 'origin'
+        const branch = slash > 0 ? entry.name.slice(slash + 1) : entry.name
+        await run('fetch', { remote: remote, branch: branch })
+      }, [run])
+
       const compareWith = useCallback(async (baseRef, headRef) => {
         const data = await run('compare', { base: baseRef, head: headRef })
         if (data === undefined) return
@@ -2459,8 +2482,9 @@
           onCompare: (entry) => { setChooserSeat(null); void compareWith(branches.branch, entry.name) },
           onMerge: (entry) => { setChooserSeat(null); void run('merge', { branch: entry.name }) },
           onRebase: (entry) => { setChooserSeat(null); void run('rebase', { onto: entry.name }) },
-          onUpdate: (entry) => { setChooserSeat(null); void run(entry.head === true ? 'pull' : 'fetch', entry.head === true ? { mode: 'ff-only' } : { prune: true }) },
-          onPush: (entry) => { setChooserSeat(null); openPushDialog(entry === undefined ? undefined : { branch: entry.name }) },
+          onUpdate: (entry) => { setChooserSeat(null); void updateBranch(entry) },
+          onFetchRemote: (entry) => { setChooserSeat(null); void fetchRemoteBranch(entry) },
+          onSetUpstream: (entry) => { setChooserSeat(null); void run('branch-upstream', { branch: branches.branch, upstream: entry.name }) },
           onFavorite: (entry) => { toggleFavoriteBranch(entry.name) },
           onCopy: (entry) => { copyValues([entry.name]) },
           onRename: (entry) => { setChooserSeat(null); setDialog({ kind: 'renameBranch', from: entry.name }) },
@@ -2472,7 +2496,9 @@
             setChooserSeat(null)
             openCommitTab()
           },
-          onPush: () => { setChooserSeat(null); openPushDialog() },
+          /* The card's top-bar 推送 button has no row (push current branch);
+             the local row menu passes an entry to push that specific branch. */
+          onPush: (entry) => { setChooserSeat(null); openPushDialog(entry === undefined ? undefined : { branch: entry.name }) },
         })))
       }
       if (accountSeat !== null) {

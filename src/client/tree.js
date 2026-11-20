@@ -430,11 +430,11 @@
       const search = needle.trim().toLowerCase()
       const entriesOf = (entries) => search === '' ? entries : entries.filter((entry) => String(entry.name).toLowerCase().indexOf(search) >= 0)
 
-      /* IDEA-style branch flyout. Local rows get the full verb set the Git
-         tool window's own branch menu offers (compare / merge / rebase /
-         update / push / favorite / copy …); remote rows keep the short
-         checkout-and-delete shape. Built imperatively so a separator never
-         sits at an edge or doubles up when a verb is unavailable. */
+      /* IDEA-style branch flyout. Both local and remote rows get the full verb
+         set the Git tool window's branch chooser offers; the remote row adds
+         fetch / set-upstream and swaps push-rename for a remote delete. Built
+         imperatively so a separator never sits at an edge or doubles up when a
+         verb is unavailable. */
       const menuFor = (entry, kind) => {
         const local = kind === 'local'
         const current = entry.head === true
@@ -448,7 +448,7 @@
           disabled: entry.worktree !== null && entry.worktree !== undefined,
           run: () => props.onCheckout(entry, kind),
         })
-        add(local && current === false ? {
+        add(current === false ? {
           id: 'compare', icon: 'compare', tone: 'violet', label: t('action.compare'),
           run: () => { if (props.onCompare !== undefined) props.onCompare(entry) },
         } : null)
@@ -457,23 +457,29 @@
           run: () => props.onNewBranch(entry, kind),
         })
         sep()
-        add(local && current === false ? {
+        add(current === false ? {
           id: 'merge', icon: 'merge', tone: 'business', label: t('action.mergeIntoCurrent'),
           run: () => props.onMerge(entry),
         } : null)
-        add(local && current === false ? {
+        add(current === false ? {
           id: 'rebase', icon: 'compare', tone: 'accent', label: t('action.rebaseCurrentOnto'),
           run: () => { if (props.onRebase !== undefined) props.onRebase(entry) },
         } : null)
         sep()
         add(local ? {
-          id: 'update', icon: 'fetch', tone: 'cyan', label: t('action.update'),
+          id: 'update', icon: 'pull', tone: 'cyan', label: t('action.updateBranch'),
           run: () => { if (props.onUpdate !== undefined) props.onUpdate(entry) },
-        } : null)
+        } : {
+          id: 'fetchRemote', icon: 'fetch', tone: 'cyan', label: t('toolbar.fetch'),
+          run: () => { if (props.onFetchRemote !== undefined) props.onFetchRemote(entry) },
+        })
         add(local ? {
           id: 'push', icon: 'push', tone: 'success', label: t('toolbar.push'),
           run: () => { if (props.onPush !== undefined) props.onPush(entry) },
-        } : null)
+        } : {
+          id: 'setUpstream', icon: 'fetch', tone: 'cyan', label: t('more.setUpstreamHead'),
+          run: () => { if (props.onSetUpstream !== undefined) props.onSetUpstream(entry) },
+        })
         sep()
         add(local ? {
           id: 'favorite', icon: 'star', tone: 'warn', label: t('action.favorite'),
@@ -484,16 +490,17 @@
           run: () => { if (props.onCopy !== undefined) props.onCopy(entry) },
         })
         sep()
-        add(kind !== 'remote' ? {
+        add(local ? {
           id: 'rename', icon: 'edit', tone: 'secondary', label: t('action.rename'),
           disabled: current,
           run: () => props.onRename(entry),
         } : null)
-        add(kind !== 'remote' ? {
-          id: 'delete', icon: 'trash', tone: 'danger', danger: true, label: t('action.delete'),
-          disabled: current,
+        add({
+          id: 'delete', icon: 'trash', tone: 'danger', danger: true,
+          label: local ? t('action.delete') : t('more.deleteRemoteBranch'),
+          disabled: local && current,
           run: () => props.onDelete(entry, kind),
-        } : null)
+        })
         if (items.length > 0 && items[items.length - 1].separator === true) items.pop()
         return items
       }
