@@ -182,11 +182,31 @@
             pushDialog.set(null)
             conflictDialog.set(null)
             conflictOverviewDialog.set(null)
+            cloneDialog.set(null)
             try { offCommit() } catch (error) { void error }
             try { offFile() } catch (error) { void error }
 
           }
         }, 'dsh-git4idea: commit, file and push overlays')
+      })
+
+      /* ---- New Session row: clone repository (user request) ---- */
+      /* The hero's workspace picker has an "Add workspace" row, but there is no
+         extension slot on that menu. A dedicated option beside it gives the
+         clone gesture a first-class home on the New Session page: URL + local
+         directory, then adopt the clone as a Workspace and open it. */
+      ctx.inject(['slots'], (cloneCtx) => {
+        const cloneSlots = cloneCtx.get('slots')
+        if (cloneSlots === undefined || cloneSlots === null || typeof cloneSlots.inject !== 'function') return
+        cloneCtx.effect(() => {
+          const off = cloneSlots.inject('conversation.hero.options', () => cloneSlots.register(
+            { name: 'conversation.hero.options', id: 'dsh-git4idea:clone', order: 10, locale: LOCALE_NS, label: () => t('more.clone') },
+            () => E(CloneOption, { t: t, ctx: ctx }),
+          ))
+          return () => {
+            try { off() } catch (error) { void error }
+          }
+        }, 'dsh-git4idea: new-session clone option')
       })
 
       /* ---- session-switch prewarm ---- */

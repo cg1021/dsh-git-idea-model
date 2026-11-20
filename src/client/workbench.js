@@ -366,7 +366,12 @@ function Workbench(props) {
         type: 'button', role: 'tab', className: 'git4idea-tab', 'data-action': 'tab-worktree',
         'data-active': tab === 'worktree' ? 'true' : 'false',
         onClick: () => setTab('worktree'),
-      }, t('tab.worktree'))),
+      }, t('tab.worktree')),
+      E('button', {
+        type: 'button', role: 'tab', className: 'git4idea-tab', 'data-action': 'tab-compare',
+        'data-active': tab === 'compare' ? 'true' : 'false',
+        onClick: () => setTab('compare'),
+      }, t('tab.compare'))),
     /* The branch bar rides below the tab strip (m00174); the panel hands it in
        so the two rows keep one React owner. */
     props.topBar === undefined ? null : props.topBar,
@@ -379,6 +384,12 @@ function Workbench(props) {
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('log') }, props.children),
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('console') }, consolePane),
     E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('worktree') }, worktreePane),
+    E('div', { className: 'git4idea-workbench-body', style: hiddenStyle('compare') },
+      E(CompareView, {
+        t: t, request: request, base: base,
+        branches: props.branches, branch: branch, repoRoot: props.repoRoot,
+        refreshKey: props.consoleTick,
+      })),
     creating === true ? E(WorktreeDialog, {
       t: t, branches: props.branches, branch: branch, repoRoot: props.repoRoot,
       pickDirectory: props.pickDirectory,

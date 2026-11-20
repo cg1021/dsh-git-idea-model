@@ -1,3 +1,93 @@
+    /* The chip in the New Session row's options strip, after the mode picker.
+       It borrows the strip's `_heroOptions` class so the frame CSS can drop the
+       host's right-justifying auto margin while the entry is mounted, and it
+       matches the mode chip's own type scale (13px/500, 28px row — the specs
+       the host ships for .workspace/.seat). Only action is to raise the
+       centered clone card; the overlay host owns the rest. */
+    function CloneOption(props) {
+      return E('button', {
+        type: 'button', className: 'git4idea-hero-action _heroOptions', 'data-tip': props.t('more.clone'),
+        onClick: () => { cloneDialog.set({}) },
+      },
+        E(Icon, { name: 'plus', size: 16 }), E('span', null, props.t('more.clone')))
+    }
+
+    /* Frame-wide clone card, raised from the New Session workspace options.
+       The two fields are the remote URL and the local directory, the same
+       shape as the panel's Clone dialog (IDEA Clone repository). Clone first,
+       then adopt the directory as a Workspace and open it, so the new session
+       points at the freshly cloned checkout. */
+    function FrameCloneDialog(props) {
+      const [url, setUrl] = useState('')
+      const [dir, setDir] = useState('')
+      const [busy, setBusy] = useState(false)
+      const ref = useRef(null)
+      useEffect(() => { if (ref.current !== null) ref.current.focus() }, [])
+      const ready = url.trim() !== '' && dir.trim() !== '' && busy === false
+      const submit = () => {
+        if (ready !== true) return
+        setBusy(true)
+        void (async () => {
+          try {
+            const target = dir.trim()
+            await request('clone', { url: url.trim(), dir: target })
+            const workspaces = props.ctx.get('workspaces')
+            const uiWorkspace = props.ctx.get('uiWorkspace')
+            let workspaceId = null
+            if (workspaces !== undefined && workspaces !== null && typeof workspaces.create === 'function') {
+              const created = await workspaces.create({ path: target })
+              workspaceId = created === null || created === undefined ? null : created.workspaceId
+            }
+            props.onClose()
+            notifyOk(props.t('toast.cloned'))
+            if (workspaceId !== null && uiWorkspace !== undefined && uiWorkspace !== null && typeof uiWorkspace.openWorkspace === 'function') {
+              void uiWorkspace.openWorkspace(workspaceId).catch((caught) => notifyFail(caught))
+            }
+          } catch (caught) {
+            notifyFail(caught)
+          } finally {
+            setBusy(false)
+          }
+        })()
+      }
+      const onKey = (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); submit() }
+        if (event.key === 'Escape') { event.preventDefault(); if (busy !== true) props.onClose() }
+      }
+      return E('div', {
+        className: 'git4idea-commit-overlay git4idea-prompt-overlay',
+        'data-git4idea-clone': '',
+        onMouseDown: (event) => { if (event.target === event.currentTarget && busy !== true) props.onClose() },
+      },
+        E('div', { className: 'git4idea-dialog git4idea-prompt-card' },
+          E('div', { className: 'git4idea-dialog-title' }, props.t('clone.title')),
+          E('div', { className: 'git4idea-clone-hint' }, props.t('clone.hint')),
+          E('input', {
+            ref: ref, className: 'git4idea-input', value: url, spellCheck: false,
+            placeholder: props.t('clone.url'), onChange: (event) => setUrl(event.target.value), onKeyDown: onKey,
+          }),
+          E('input', {
+            className: 'git4idea-input', value: dir, spellCheck: false,
+            placeholder: props.t('clone.dir'), onChange: (event) => setDir(event.target.value), onKeyDown: onKey,
+          }),
+          E('div', { className: 'git4idea-dialog-actions' },
+            E('button', { type: 'button', className: 'git4idea-btn', onClick: props.onClose }, props.t('confirm.cancel')),
+            E('button', { type: 'button', className: 'git4idea-btn git4idea-btn-primary', disabled: ready === false, onClick: submit }, props.t('clone.run')))))
+    }
+
+    function CloneDialogHost(props) {
+      const [entry, setEntry] = useState(cloneDialog.entry)
+      useEffect(() => {
+        const sync = () => setEntry(cloneDialog.entry)
+        sync()
+        const off = cloneDialog.subscribe(sync)
+        cloneDialog.hosted = true
+        return () => { cloneDialog.hosted = false; off() }
+      }, [])
+      if (entry === null) return null
+      return E(FrameCloneDialog, { key: 'clone', t: props.t, ctx: props.ctx, onClose: () => cloneDialog.set(null) })
+    }
+
     function GitDialogHost(props) {
       const [entry, setEntry] = useState(commitDialog.entry)
       const [pushEntry, setPushEntry] = useState(pushDialog.entry)
@@ -71,7 +161,8 @@
           onClose: () => { conflictDialog.set(null) },
         })),
         E(PromptDialogHost, null),
-        E(ConfirmDialogHost, { t: props.t }))
+        E(ConfirmDialogHost, { t: props.t }),
+        E(CloneDialogHost, { t: props.t, ctx: props.ctx }))
     }
 
     /* The frame-wide commit card (the composer pill's 提交 verb) wraps the same
@@ -252,7 +343,9 @@
          refresh; a rejected one reports in the bottom-right stack.
          ChangesPanel has already cleared its draft by the time this returns.
          m02986: the push is a second, explicit step — hand over to the push
-         dialog only after the commit route reports success. */
+         dialog only after the commit route reports success. The commit tab
+         mounts this card without a shell (no onClose prop): there the card
+         stays open and the branch notification below reloads its list. */
       const commit = (message, amend, push, paths) => {
         void (async () => {
           setBusy(true)
@@ -265,13 +358,23 @@
             try { notifyBranchSwitched(entry.sessionId, entry.repoRoot) } catch (caught) { void caught }
             toastCenter.push({ text: t('toast.committed'), tone: 'ok', icon: 'check' })
             if (push === true) pushDialog.set({ cwd: entry.cwd, repoRoot: entry.repoRoot, sessionId: entry.sessionId })
-            props.onClose()
+            if (props.onClose !== undefined) props.onClose()
           } catch (caught) {
             notifyFail(caught)
             setBusy(false)
           }
         })()
       }
+      /* The commit tab's card has no dialog shell, so nothing closed over it.
+         The same watcher that follows a branch switch reloads the summary: the
+         push dialog opened from 提交并推送 reports its landing through it, and
+         this page refreshes the moment that card closes (user request). */
+      useEffect(() => {
+        const onChanged = () => { void loadSummary() }
+        composerBranchWatchers.add(onChanged)
+        return () => { composerBranchWatchers.delete(onChanged) }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [entry.cwd, entry.repoRoot])
       /* No Escape handler: the card is frame-anchored only through the dialog
          shell; the commit tab keeps it mounted and must not be closed by a key. */
       const stagedPaths = () => (summary === null ? [] : summary.changes.staged.map((item) => item.path))

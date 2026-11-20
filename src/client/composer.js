@@ -171,6 +171,26 @@
       },
     }
 
+    /* The clone card is raised from the New Session row's workspace options.
+       Same frame-overlay rule as the prompt: the hero picker lives under a
+       contain:layout ancestor, so the URL + directory form portals to the
+       shell overlay instead of opening under the row. */
+    const cloneDialog = {
+      entry: null,
+      hosted: false,
+      listeners: new Set(),
+      set(entry) {
+        cloneDialog.entry = entry
+        for (const listener of Array.from(cloneDialog.listeners)) {
+          try { listener() } catch (error) { void error }
+        }
+      },
+      subscribe(listener) {
+        cloneDialog.listeners.add(listener)
+        return () => { cloneDialog.listeners.delete(listener) }
+      },
+    }
+
     /* Destructive confirms raised by the composer pill follow the same rule:
        the pill sits in a dock container with `contain: layout`, so a card
        mounted beside it is clipped to the composer strip (reported against the

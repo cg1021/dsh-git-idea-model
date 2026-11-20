@@ -242,7 +242,15 @@
     function LineDiff(props) {
       const t = props.t
       const files = useMemo(() => splitPatchFiles(props.patch), [props.patch])
-      const [active, setActive] = useState(0)
+      /* The compare page drives the picked file from its own list. When
+         activeIndex/onActiveChange are supplied the selector is controlled;
+         every other caller keeps the original self-managed state. */
+      const [ownActive, setOwnActive] = useState(0)
+      const active = props.activeIndex === undefined ? ownActive : props.activeIndex
+      const setActive = (value) => {
+        if (typeof props.onActiveChange === 'function') props.onActiveChange(value)
+        else setOwnActive(value)
+      }
       const [prefs, setPrefs] = useState(readLineDiffPrefs)
       useEffect(() => { writeLineDiffPrefs(prefs) }, [prefs])
       const [menuOpen, setMenuOpen] = useState(false)

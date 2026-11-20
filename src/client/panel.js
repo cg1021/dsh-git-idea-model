@@ -937,7 +937,16 @@
 
       const checkout = useCallback(async (entry) => {
         if (entry.tag === true) { void run('checkout', { branch: entry.name }); return }
-        if (entry.remote === true) { void run('checkout', { branch: entry.name.slice(entry.name.indexOf('/') + 1) }); return }
+        /* A remote ref is checked out as a LOCAL branch of the same name,
+           created from that ref with tracking in one step. Never switch to a
+           stale local twin: IDEA's "Checkout" on origin/foo always yields a
+           branch named foo pointing at origin/foo. */
+        if (entry.remote === true) {
+          const slash = entry.name.indexOf('/')
+          const local = slash >= 0 ? entry.name.slice(slash + 1) : entry.name
+          void run('checkout', { branch: local, create: true, startPoint: entry.name, track: true })
+          return
+        }
         void run('checkout', { branch: entry.name })
       }, [run])
 

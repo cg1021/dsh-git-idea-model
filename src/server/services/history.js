@@ -315,3 +315,20 @@ export async function compare(payload) {
   const logOut = await git(root, ['log', '--max-count=100', '--date-order', '--pretty=format:' + LOG_FORMAT, base + '..' + head])
   return { base, head, files, commits: parseLog(logOut) }
 }
+
+
+/* Two arbitrary refs (branch or tag) compared as two trees: a plain two-dot
+   diff, unlike compare()'s three-dot "since the merge base". The compare page
+   wants IDEA's "Compare with Branch" semantics — the final state of A against
+   B — so both the file list and the patch use the same `base head` pair. */
+export async function refDiff(payload) {
+  const cwd = cwdOf(payload)
+  const root = await repoRootOf(cwd, payload)
+  const base = requireRef(payload.base, 'base')
+  const head = requireRef(payload.head, 'head')
+  const stat = await git(root, ['diff', '--numstat', '-z', base, head])
+  const files = parseNumstat(stat)
+  const patchOut = await git(root, ['diff', '--no-color', '--no-ext-diff', '-U3', base, head])
+  const truncated = patchOut.length > MAX_DIFF_CHARS
+  return { base, head, files, patch: truncated ? patchOut.slice(0, MAX_DIFF_CHARS) : patchOut, truncated }
+}
