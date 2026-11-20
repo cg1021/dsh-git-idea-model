@@ -1,10 +1,10 @@
-# @guojinpeng/dsh-git4idea
+# @guojinpeng/dsh-git-idea-model
 
 DSH 插件。它在 DeepSeek Harness 中提供一个 IDE 风格的 Git 工具窗口：分支树、提交图谱、变更与暂存、提交详情、差异视图、控制台和工作树。
 
-![Git4idea Git 面板：分支树、提交图谱与提交详情](https://raw.githubusercontent.com/guojinpeng/dsh-git4idea/main/docs/images/01-git-graph.png)
+![Git 工具窗口：分支树、提交图谱与提交详情](https://raw.githubusercontent.com/guojinpeng/dsh-git-idea-model/main/docs/images/01-git-graph.png)
 
-分支树、提交图谱、AI 提交信息与三栏冲突解决，都在对话旁边完成。更多效果图：[变更与 AI 提交](https://github.com/guojinpeng/dsh-git4idea/blob/main/docs/images/02-changes-ai.png) · [三栏冲突](https://github.com/guojinpeng/dsh-git4idea/blob/main/docs/images/03-conflict.png)。
+分支树、提交图谱、AI 提交信息与三栏冲突解决，都在对话旁边完成。更多效果图：[变更与 AI 提交](https://github.com/guojinpeng/dsh-git-idea-model/blob/main/docs/images/02-changes-ai.png) · [三栏冲突](https://github.com/guojinpeng/dsh-git-idea-model/blob/main/docs/images/03-conflict.png)。
 
 ## 入口
 
@@ -93,7 +93,7 @@ DSH 插件。它在 DeepSeek Harness 中提供一个 IDE 风格的 Git 工具窗
 
 ## 控制台
 
-- 显示 `~/.dsh/guojinpeng/dsh-git4idea/log/console.log` 的尾部 256 KiB，最多绘制 2000 行。
+- 显示 `~/.dsh/guojinpeng/dsh-git-idea-model/log/console.log` 的尾部 256 KiB，最多绘制 2000 行。
 - 每条 git 命令记录命令行、标准输出和标准错误，时间戳使用北京时间。
 - 只在控制台可见或 git 操作结束后刷新，不轮询。
 - 文件超过 64 KB 时轮转为 `console.log.1`。
@@ -124,7 +124,7 @@ DSH 插件。它在 DeepSeek Harness 中提供一个 IDE 风格的 Git 工具窗
 ## 安装
 
 ```bash
-dsh plugin --profile web add -w @guojinpeng/dsh-git4idea
+dsh plugin --profile web add -w @guojinpeng/dsh-git-idea-model
 ```
 
 将 `web` 替换为你使用的 profile 名称。包内的 `cordis.patch.yml` 会并入 profile，不需要手写挂载行。宿主半改动后重启 `dsh web`；客户端半改动后刷新页面。
@@ -140,7 +140,7 @@ dsh plugin --profile web add -w @guojinpeng/dsh-git4idea
 - 分栏尺寸
 - 行内差异偏好
 
-保存位置：`~/.dsh/guojinpeng/dsh-git4idea/config/settings.json`。
+保存位置：`~/.dsh/guojinpeng/dsh-git-idea-model/config/settings.json`。
 
 | 行为 | 默认值 |
 | --- | --- |

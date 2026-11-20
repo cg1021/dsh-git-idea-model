@@ -1,10 +1,10 @@
 {
-  "name": "@guojinpeng/dsh-git4idea",
+  "name": "@guojinpeng/dsh-git-idea-model",
   "version": "0.4.2",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/guojinpeng/dsh-git4idea.git"
+    "url": "git+https://github.com/guojinpeng/dsh-git-idea-model.git"
   },
   "publishConfig": {
     "access": "public"
@@ -73,9 +73,9 @@
       "optional": true
     }
   },
-  "homepage": "https://github.com/guojinpeng/dsh-git4idea",
+  "homepage": "https://github.com/guojinpeng/dsh-git-idea-model",
   "bugs": {
-    "url": "https://github.com/guojinpeng/dsh-git4idea/issues"
+    "url": "https://github.com/guojinpeng/dsh-git-idea-model/issues"
   },
   "icon": "./icon.svg"
 }

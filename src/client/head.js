@@ -18,7 +18,7 @@
  * exactly like the host's own panels do.
  */
 window.__ModuleLoader__.load({
-  id: '@guojinpeng/dsh-git4idea',
+  id: '@guojinpeng/dsh-git-idea-model',
   factory: (require) => {
     const React = require('react')
     const E = React.createElement
