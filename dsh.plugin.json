@@ -1,5 +1,5 @@
 {
-  "id": "guojinpeng/dsh-git-idea-model",
+  "id": "cg1021/dsh-git-idea-model",
   "version": "0.4.2",
   "main": "./src/index.js",
   "engines": {

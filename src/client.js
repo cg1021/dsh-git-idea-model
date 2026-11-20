@@ -18,7 +18,7 @@
  * exactly like the host's own panels do.
  */
 window.__ModuleLoader__.load({
-  id: '@guojinpeng/dsh-git-idea-model',
+  id: '@cg1021/dsh-git-idea-model',
   factory: (require) => {
     const React = require('react')
     const E = React.createElement
@@ -59,7 +59,7 @@ window.__ModuleLoader__.load({
     const API_BASE = 'dsh-git4idea/api'
 
     /* ---- panel settings home (m04919) ----
-       The host keeps the panel's settings in <home>/.dsh/guojinpeng/
+       The host keeps the panel's settings in <home>/.dsh/cg1021/
        dsh-git4idea/config/settings.json, not in browser storage: a new browser,
        an update and a second machine then show the same rail, pane sizes,
        starred branches and last repository. The file is read ONCE, before the
@@ -15756,6 +15756,6 @@ function Workbench(props) {
        mount any seat, so every readStored call below sees the saved value. */
     loadPanelSettings()
 
-    return { name: '@guojinpeng/dsh-git-idea-model', inject: [], apply }
+    return { name: '@cg1021/dsh-git-idea-model', inject: [], apply }
   },
 })
