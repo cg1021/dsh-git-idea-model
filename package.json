@@ -1,6 +1,6 @@
 {
   "name": "@cg1021/dsh-git-idea-model",
-  "version": "0.4.2",
+  "version": "1.0.0",
   "type": "module",
   "repository": {
     "type": "git",
