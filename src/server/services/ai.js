@@ -81,7 +81,9 @@ export function commitMessagesOf(input, userPrompt, language) {
     'You write git commit messages.',
     spoken === undefined ? 'Write the message in the language of the diff context.' : 'Write the message in ' + spoken + '.',
     'Reply with the commit message ONLY: no prose, no code fences, no quotes, no explanation.',
-    'First line: a concise subject, at most 72 characters, no trailing period.',
+    'Follow Conventional Commits strictly: the first line is "type(optional scope): subject".',
+    'Use one of these types: feat, fix, docs, style, refactor, test, chore, perf.',
+    'Keep the first line concise, at most 72 characters, with no trailing period.',
     'Then one blank line and a short body explaining what changed and why, when it adds value.',
     'Describe only what the diff shows. Never invent files, features or issue numbers.',
   ].join('\n')
