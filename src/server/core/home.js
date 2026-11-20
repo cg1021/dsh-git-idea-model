@@ -28,7 +28,7 @@ export const PLUGIN_CONSOLE_FILE = path.join(PLUGIN_LOG_DIR, 'console.log')
 
 /* Old output is rotated once, so an unbounded console.log cannot fill the
    disk. The .1 file is kept for a manual look. */
-export const CONSOLE_LOG_MAX_BYTES = 5 * 1024 * 1024
+export const CONSOLE_LOG_MAX_BYTES = 64 * 1024
 
 
 export function consoleLogFile() {
