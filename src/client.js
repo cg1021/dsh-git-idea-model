@@ -4862,11 +4862,11 @@ window.__ModuleLoader__.load({
       const search = needle.trim().toLowerCase()
       const entriesOf = (entries) => search === '' ? entries : entries.filter((entry) => String(entry.name).toLowerCase().indexOf(search) >= 0)
 
-      /* IDEA-style branch flyout. Local rows get the full verb set the Git
-         tool window's own branch menu offers (compare / merge / rebase /
-         update / push / favorite / copy …); remote rows keep the short
-         checkout-and-delete shape. Built imperatively so a separator never
-         sits at an edge or doubles up when a verb is unavailable. */
+      /* IDEA-style branch flyout. Both local and remote rows get the full verb
+         set the Git tool window's branch chooser offers; the remote row adds
+         fetch / set-upstream and swaps push-rename for a remote delete. Built
+         imperatively so a separator never sits at an edge or doubles up when a
+         verb is unavailable. */
       const menuFor = (entry, kind) => {
         const local = kind === 'local'
         const current = entry.head === true
@@ -4880,7 +4880,7 @@ window.__ModuleLoader__.load({
           disabled: entry.worktree !== null && entry.worktree !== undefined,
           run: () => props.onCheckout(entry, kind),
         })
-        add(local && current === false ? {
+        add(current === false ? {
           id: 'compare', icon: 'compare', tone: 'violet', label: t('action.compare'),
           run: () => { if (props.onCompare !== undefined) props.onCompare(entry) },
         } : null)
@@ -4889,23 +4889,29 @@ window.__ModuleLoader__.load({
           run: () => props.onNewBranch(entry, kind),
         })
         sep()
-        add(local && current === false ? {
+        add(current === false ? {
           id: 'merge', icon: 'merge', tone: 'business', label: t('action.mergeIntoCurrent'),
           run: () => props.onMerge(entry),
         } : null)
-        add(local && current === false ? {
+        add(current === false ? {
           id: 'rebase', icon: 'compare', tone: 'accent', label: t('action.rebaseCurrentOnto'),
           run: () => { if (props.onRebase !== undefined) props.onRebase(entry) },
         } : null)
         sep()
         add(local ? {
-          id: 'update', icon: 'fetch', tone: 'cyan', label: t('action.update'),
+          id: 'update', icon: 'pull', tone: 'cyan', label: t('action.updateBranch'),
           run: () => { if (props.onUpdate !== undefined) props.onUpdate(entry) },
-        } : null)
+        } : {
+          id: 'fetchRemote', icon: 'fetch', tone: 'cyan', label: t('toolbar.fetch'),
+          run: () => { if (props.onFetchRemote !== undefined) props.onFetchRemote(entry) },
+        })
         add(local ? {
           id: 'push', icon: 'push', tone: 'success', label: t('toolbar.push'),
           run: () => { if (props.onPush !== undefined) props.onPush(entry) },
-        } : null)
+        } : {
+          id: 'setUpstream', icon: 'fetch', tone: 'cyan', label: t('more.setUpstreamHead'),
+          run: () => { if (props.onSetUpstream !== undefined) props.onSetUpstream(entry) },
+        })
         sep()
         add(local ? {
           id: 'favorite', icon: 'star', tone: 'warn', label: t('action.favorite'),
@@ -4916,16 +4922,17 @@ window.__ModuleLoader__.load({
           run: () => { if (props.onCopy !== undefined) props.onCopy(entry) },
         })
         sep()
-        add(kind !== 'remote' ? {
+        add(local ? {
           id: 'rename', icon: 'edit', tone: 'secondary', label: t('action.rename'),
           disabled: current,
           run: () => props.onRename(entry),
         } : null)
-        add(kind !== 'remote' ? {
-          id: 'delete', icon: 'trash', tone: 'danger', danger: true, label: t('action.delete'),
-          disabled: current,
+        add({
+          id: 'delete', icon: 'trash', tone: 'danger', danger: true,
+          label: local ? t('action.delete') : t('more.deleteRemoteBranch'),
+          disabled: local && current,
           run: () => props.onDelete(entry, kind),
-        } : null)
+        })
         if (items.length > 0 && items[items.length - 1].separator === true) items.pop()
         return items
       }
@@ -8506,6 +8513,29 @@ function Workbench(props) {
         void run('checkout', { branch: entry.name })
       }, [run])
 
+      /* 更新 (Update): the checked-out branch is pulled ff-only; any other
+         local branch is fast-forwarded in place by a refspec fetch, which git
+         refuses to move backwards. Mirrors the composer pill's updateBranch so
+         the branch chooser and the pill behave identically. */
+      const updateBranch = useCallback(async (entry) => {
+        if (entry.head === true) { await run('pull', { mode: 'ff-only' }); return }
+        const upstream = entry.upstream === null || entry.upstream === undefined ? '' : String(entry.upstream)
+        const slash = upstream.indexOf('/')
+        const remote = slash > 0 ? upstream.slice(0, slash) : 'origin'
+        const remoteBranch = slash > 0 ? upstream.slice(slash + 1) : entry.name
+        await run('fetch', { remote: remote, branch: remoteBranch + ':' + entry.name })
+      }, [run])
+
+      /* A remote row's fetch pulls just that ref into its tracking ref
+         (`git fetch origin feature` refreshes refs/remotes/origin/feature),
+         keeping the chooser on the fresh state. */
+      const fetchRemoteBranch = useCallback(async (entry) => {
+        const slash = entry.name.indexOf('/')
+        const remote = slash > 0 ? entry.name.slice(0, slash) : 'origin'
+        const branch = slash > 0 ? entry.name.slice(slash + 1) : entry.name
+        await run('fetch', { remote: remote, branch: branch })
+      }, [run])
+
       const compareWith = useCallback(async (baseRef, headRef) => {
         const data = await run('compare', { base: baseRef, head: headRef })
         if (data === undefined) return
@@ -10015,8 +10045,9 @@ function Workbench(props) {
           onCompare: (entry) => { setChooserSeat(null); void compareWith(branches.branch, entry.name) },
           onMerge: (entry) => { setChooserSeat(null); void run('merge', { branch: entry.name }) },
           onRebase: (entry) => { setChooserSeat(null); void run('rebase', { onto: entry.name }) },
-          onUpdate: (entry) => { setChooserSeat(null); void run(entry.head === true ? 'pull' : 'fetch', entry.head === true ? { mode: 'ff-only' } : { prune: true }) },
-          onPush: (entry) => { setChooserSeat(null); openPushDialog(entry === undefined ? undefined : { branch: entry.name }) },
+          onUpdate: (entry) => { setChooserSeat(null); void updateBranch(entry) },
+          onFetchRemote: (entry) => { setChooserSeat(null); void fetchRemoteBranch(entry) },
+          onSetUpstream: (entry) => { setChooserSeat(null); void run('branch-upstream', { branch: branches.branch, upstream: entry.name }) },
           onFavorite: (entry) => { toggleFavoriteBranch(entry.name) },
           onCopy: (entry) => { copyValues([entry.name]) },
           onRename: (entry) => { setChooserSeat(null); setDialog({ kind: 'renameBranch', from: entry.name }) },
@@ -10028,7 +10059,9 @@ function Workbench(props) {
             setChooserSeat(null)
             openCommitTab()
           },
-          onPush: () => { setChooserSeat(null); openPushDialog() },
+          /* The card's top-bar 推送 button has no row (push current branch);
+             the local row menu passes an entry to push that specific branch. */
+          onPush: (entry) => { setChooserSeat(null); openPushDialog(entry === undefined ? undefined : { branch: entry.name }) },
         })))
       }
       if (accountSeat !== null) {
