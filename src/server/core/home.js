@@ -10,9 +10,9 @@ import path from 'node:path'
 
 /* One home for everything this plugin keeps on disk (m04917). It follows the
    user's home directory, so the same code works on every host and user:
-   <home>/.dsh/guojinpeng/dsh-git-idea-model/{config,log}. The config folder holds the
+   <home>/.dsh/cg1021/dsh-git-idea-model/{config,log}. The config folder holds the
    settings the panel would keep locally; the log folder holds the error log. */
-export const PLUGIN_HOME = path.join(homedir(), '.dsh', 'guojinpeng', 'dsh-git-idea-model')
+export const PLUGIN_HOME = path.join(homedir(), '.dsh', 'cg1021', 'dsh-git-idea-model')
 
 export const PLUGIN_CONFIG_DIR = path.join(PLUGIN_HOME, 'config')
 

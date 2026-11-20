@@ -1,10 +1,12 @@
-# @guojinpeng/dsh-git-idea-model
+# @cg1021/dsh-git-idea-model
 
 DSH 插件。它在 DeepSeek Harness 中提供一个 IDE 风格的 Git 工具窗口：分支树、提交图谱、变更与暂存、提交详情、差异视图、控制台和工作树。
 
-![Git 工具窗口：分支树、提交图谱与提交详情](https://raw.githubusercontent.com/guojinpeng/dsh-git-idea-model/main/docs/images/01-git-graph.png)
+本项目基于 [guojinpeng/dsh-git4idea](https://github.com/guojinpeng/dsh-git4idea) 做了功能扩展；该项目又基于 [KannaKuron/dsh-ide-git](https://github.com/KannaKuron/dsh-ide-git)。
 
-分支树、提交图谱、AI 提交信息与三栏冲突解决，都在对话旁边完成。更多效果图：[变更与 AI 提交](https://github.com/guojinpeng/dsh-git-idea-model/blob/main/docs/images/02-changes-ai.png) · [三栏冲突](https://github.com/guojinpeng/dsh-git-idea-model/blob/main/docs/images/03-conflict.png)。
+![Git 工具窗口：分支树、提交图谱与提交详情](https://raw.githubusercontent.com/cg1021/dsh-git-idea-model/main/docs/images/01-git-graph.png)
+
+分支树、提交图谱、AI 提交信息与三栏冲突解决，都在对话旁边完成。更多效果图：[变更与 AI 提交](https://github.com/cg1021/dsh-git-idea-model/blob/main/docs/images/02-changes-ai.png) · [三栏冲突](https://github.com/cg1021/dsh-git-idea-model/blob/main/docs/images/03-conflict.png)。
 
 ## 入口
 
@@ -93,7 +95,7 @@ DSH 插件。它在 DeepSeek Harness 中提供一个 IDE 风格的 Git 工具窗
 
 ## 控制台
 
-- 显示 `~/.dsh/guojinpeng/dsh-git-idea-model/log/console.log` 的尾部 256 KiB，最多绘制 2000 行。
+- 显示 `~/.dsh/cg1021/dsh-git-idea-model/log/console.log` 的尾部 256 KiB，最多绘制 2000 行。
 - 每条 git 命令记录命令行、标准输出和标准错误，时间戳使用北京时间。
 - 只在控制台可见或 git 操作结束后刷新，不轮询。
 - 文件超过 64 KB 时轮转为 `console.log.1`。
@@ -124,7 +126,7 @@ DSH 插件。它在 DeepSeek Harness 中提供一个 IDE 风格的 Git 工具窗
 ## 安装
 
 ```bash
-dsh plugin --profile web add -w @guojinpeng/dsh-git-idea-model
+dsh plugin --profile web add -w @cg1021/dsh-git-idea-model
 ```
 
 将 `web` 替换为你使用的 profile 名称。包内的 `cordis.patch.yml` 会并入 profile，不需要手写挂载行。宿主半改动后重启 `dsh web`；客户端半改动后刷新页面。
@@ -140,7 +142,7 @@ dsh plugin --profile web add -w @guojinpeng/dsh-git-idea-model
 - 分栏尺寸
 - 行内差异偏好
 
-保存位置：`~/.dsh/guojinpeng/dsh-git-idea-model/config/settings.json`。
+保存位置：`~/.dsh/cg1021/dsh-git-idea-model/config/settings.json`。
 
 | 行为 | 默认值 |
 | --- | --- |
@@ -165,6 +167,6 @@ npm run i18n:check    # 只校验，不写文件
 
 ## 许可
 
-MIT。原始实现版权归 KannaKuron，见 `LICENSE`。
+MIT，见 `LICENSE`。本项目基于 guojinpeng/dsh-git4idea 扩展，其原始实现来自 KannaKuron/dsh-ide-git，原始实现的版权归 KannaKuron 所有。
 
 图标路径数据取自 IntelliJ Platform，Apache License 2.0，版权归 JetBrains s.r.o.。

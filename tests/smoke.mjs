@@ -50,8 +50,8 @@ const BASELINE = new Set([
 test('release bookkeeping: package.json and dsh.plugin.json agree', () => {
   assert.equal(manifest.version, pkg.version)
   assert.equal(manifest.main, './' + pkg.main)
-  assert.equal(pkg.name, '@guojinpeng/dsh-git-idea-model')
-  assert.equal(manifest.id, 'guojinpeng/dsh-git-idea-model')
+  assert.equal(pkg.name, '@cg1021/dsh-git-idea-model')
+  assert.equal(manifest.id, 'cg1021/dsh-git-idea-model')
   assert.equal(pkg.license, 'MIT')
   assert.ok(exists('LICENSE'))
 })
@@ -133,18 +133,18 @@ test('the dsh peer survives the runtime compatibility check', () => {
   assert.equal(pkg.peerDependenciesMeta?.['@deepseek-ai/dsh']?.optional, true)
 })
 
-test('cordis patch mounts exactly one row named @guojinpeng/dsh-git-idea-model', () => {
+test('cordis patch mounts exactly one row named @cg1021/dsh-git-idea-model', () => {
   // Commented-out examples must not count: only live YAML lines are the mount.
   const active = patch.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n')
   assert.match(active, /- insert:/)
   const names = active.match(/name: '([^']+)'/g) || []
-  assert.deepEqual(names, ["name: '@guojinpeng/dsh-git-idea-model'"])
-  assert.match(active, /id: guojinpeng\/dsh-git-idea-model/)
+  assert.deepEqual(names, ["name: '@cg1021/dsh-git-idea-model'"])
+  assert.match(active, /id: cg1021\/dsh-git-idea-model/)
 })
 
 test('client half uses the no-build ModuleLoader wrapper', () => {
   assert.match(client, /window\.__ModuleLoader__\.load\(\{/)
-  assert.match(client, /id: '@guojinpeng\/dsh-git-idea-model'/)
+  assert.match(client, /id: '@cg1021\/dsh-git-idea-model'/)
   assert.match(client, /factory: \(require\) =>/)
   assert.doesNotMatch(client, /^\s*import\s/m, 'client half must not use import')
   assert.doesNotMatch(client, /\bexport\s+(default\s+)?(const|function|class)\b/)
@@ -814,7 +814,7 @@ test('client half has two doors: the native right sidebar, the conversation view
 })
 
 test('host half is an ESM cordis plugin with argv-only git calls', () => {
-  assert.match(host, /export const name = 'guojinpeng\/dsh-git-idea-model'/)
+  assert.match(host, /export const name = 'cg1021\/dsh-git-idea-model'/)
   assert.match(host, /export const inject = \['webServer'\]/)
   assert.match(host, /export function apply\(ctx\)/)
   assert.match(host, /ctx\.webServer\.register\(\{ kind: 'prefix', path: ROUTE_PREFIX/)
