@@ -924,6 +924,7 @@
       '.git4idea-cs-item-note{color:var(--dsw-alias-label-tertiary);font-size:11px;flex:none}',
       '.git4idea-cs-item-counts{display:inline-flex;gap:5px;flex:none;font-variant-numeric:tabular-nums;font-size:11px}',
       '.git4idea-cs-item-tail{display:inline-flex;align-items:center;gap:6px;margin-left:auto;flex:none;color:var(--dsw-alias-label-tertiary)}',
+      '.git4idea-cs-item-upstream{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:11px;opacity:.85}',
       '.git4idea-cs-item[data-menu=true]{background:var(--dsw-alias-interactive-bg-hover)}',
       '.git4idea-cs-static{color:var(--dsw-alias-label-tertiary);cursor:default}',
       /* Branch popover (m01216 #10): the tree's search box, the fetched sections

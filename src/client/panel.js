@@ -2456,7 +2456,13 @@
             setDialog({ kind: 'newBranch', from: entry.name, track: kind === 'remote' })
           },
           onNewBranchAtHead: () => { setChooserSeat(null); setDialog({ kind: 'newBranch' }) },
+          onCompare: (entry) => { setChooserSeat(null); void compareWith(branches.branch, entry.name) },
           onMerge: (entry) => { setChooserSeat(null); void run('merge', { branch: entry.name }) },
+          onRebase: (entry) => { setChooserSeat(null); void run('rebase', { onto: entry.name }) },
+          onUpdate: (entry) => { setChooserSeat(null); void run(entry.head === true ? 'pull' : 'fetch', entry.head === true ? { mode: 'ff-only' } : { prune: true }) },
+          onPush: (entry) => { setChooserSeat(null); openPushDialog(entry === undefined ? undefined : { branch: entry.name }) },
+          onFavorite: (entry) => { toggleFavoriteBranch(entry.name) },
+          onCopy: (entry) => { copyValues([entry.name]) },
           onRename: (entry) => { setChooserSeat(null); setDialog({ kind: 'renameBranch', from: entry.name }) },
           onDelete: (entry, kind) => { setChooserSeat(null); deleteBranchEntries([{ kind: kind, name: entry.name, entry: entry }]) },
           /* Opening the branch menu is not a commit trigger: the entry must
