@@ -387,13 +387,16 @@
       '.git4idea-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.git4idea-input:focus{border-color:var(--dsw-alias-state-business-primary,var(--dsw-alias-brand-primary))}',
       '.git4idea-clone-hint{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.45}',
-      /* The hero clone chip matches the mode picker's type scale — the host
-         ships 13px/500, line-height 20px, min-height 28px, padding 0 8px for
-         its .workspace/.seat chips — so the strip reads as one row of controls.
-         The strip div carries margin-left:auto (the host justifies its options
-         right); this entry sits after the mode picker, so its mount drops that
-         margin and the whole strip keeps the row's left alignment. */
-      '[data-slot="conversation.hero.options"] ._heroOptions{margin-left:0}',
+      /* The host wraps conversation.hero.options in a div carrying
+         margin-left:auto, which justifies the whole strip to the RIGHT — that
+         is why the clone chip did not follow the mode picker. The margin lives
+         on that wrapper, NOT on the slot outlet (a display:contents div) nor on
+         our button, so a rule on a descendant can never reach it. Reach the
+         wrapper from the inside with :has(): a div that directly owns the
+         slot outlet AND contains our chip loses the auto margin, so the strip
+         sits left, immediately after the mode picker. Scoped on the chip so
+         other owners of the strip keep the host's right alignment. */
+      'div:has(> [data-slot="conversation.hero.options"]):has(.git4idea-hero-action){margin-left:0}',
       '.git4idea-hero-action{display:inline-flex;align-items:center;flex:none;gap:4px;height:28px;padding:0 8px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;line-height:20px;white-space:nowrap;cursor:pointer}',
       '.git4idea-hero-action:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.git4idea-input-compact{padding:3px 6px}',
@@ -688,18 +691,38 @@
          LineDiff below. Both panes scroll on their own. */
       '.git4idea-cmp{display:flex;flex-direction:column;height:100%;min-height:0}',
       '.git4idea-cmp-top{display:flex;align-items:flex-end;gap:8px;padding:8px 10px;flex:none;border-bottom:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle))}',
+      '.git4idea-cmp-top-inner{display:flex;align-items:flex-end;gap:8px;width:50%;min-width:340px;max-width:100%}',
       '.git4idea-cmp-field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}',
       '.git4idea-cmp-field-label{color:var(--dsw-alias-label-secondary);font-size:calc(11px + var(--dsh-content-font-delta-secondary, 0px))}',
       '.git4idea-cmp-top .git4idea-btn-primary{flex:none}',
       '.git4idea-cmp-error{padding:6px 10px;color:var(--dsw-alias-state-error,var(--dsw-alias-state-danger));font-size:12px;flex:none}',
       '.git4idea-cmp-body{display:flex;flex:1;min-height:0}',
-      '.git4idea-cmp-files{width:220px;flex:none;overflow:auto;border-right:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle));padding:4px 0}',
-      '.git4idea-cmp-file{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;padding:4px 8px;cursor:pointer}',
-      '.git4idea-cmp-file:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.git4idea-cmp-file-active{background:var(--dsw-alias-interactive-bg-selected,var(--dsw-alias-interactive-bg-hover));border-left-color:var(--dsw-alias-brand-primary)}',
-      '.git4idea-cmp-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:calc(12px + var(--dsh-content-font-delta-secondary, 0px))}',
-      '.git4idea-cmp-file-counts{display:flex;gap:8px;font-size:11px}',
+      /* Type-to-filter ref picker: a text field with a grouped popup. */
+      '.git4idea-cmp-picker{position:relative;display:block;flex:1;min-width:0}',
+      '.git4idea-cmp-picker-input{padding-right:22px}',
+      '.git4idea-cmp-picker-caret{position:absolute;right:6px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--dsw-alias-label-tertiary);display:inline-flex}',
+      '.git4idea-cmp-picker-menu{position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:70;max-height:min(360px,50vh);overflow:auto;padding:4px;border-radius:var(--dsw-radius-sm,8px);background:var(--dsh-any-op-menu-cordis,var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1)));box-shadow:var(--dsw-elevation-prominent,0 8px 24px rgba(0,0,0,.32));color:var(--dsw-alias-label-primary)}',
+      '.git4idea-cmp-picker-group + .git4idea-cmp-picker-group{border-top:1px solid var(--dsw-alias-hairline,var(--dsw-alias-border-l1));margin-top:2px;padding-top:2px}',
+      '.git4idea-cmp-picker-empty{padding:6px 8px;color:var(--dsw-alias-label-tertiary);font-size:12px}',
+      /* Left file column: header with eye/expand/collapse, resizable width. */
+      '.git4idea-cmp-left{flex:none;min-width:140px;display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle))}',
+      '.git4idea-cmp-list-head{display:flex;align-items:center;gap:2px;flex:none;height:28px;padding:0 8px 0 14px;border-bottom:1px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-subtle))}',
+      '.git4idea-cmp-list-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary);font-size:calc(11px + var(--dsh-content-font-delta-secondary, 0px))}',
+      '.git4idea-cmp-files{flex:1;min-height:0;overflow:auto;padding:4px 0}',
+      '.git4idea-cmp-file-num{flex:none;color:var(--dsw-alias-state-success-primary,#3fb950);font-size:11px;font-variant-numeric:tabular-nums}',
+      '.git4idea-cmp-file-num-del{color:var(--dsw-alias-state-danger-primary,#f85149)}',
+      '.git4idea-cmp-gutter{flex:0 0 6px;cursor:col-resize;background:transparent;touch-action:none}',
+      '.git4idea-cmp-gutter:hover,.git4idea-cmp-gutter:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}',
       '.git4idea-cmp-diff{flex:1;min-width:0;overflow:auto}',
+      '.git4idea-cmp-diff .git4idea-lf-root{height:100%}',
+      /* Compare page split diff (user request): a long code line must always
+         be draggable into view, so each column keeps a permanent horizontal
+         track (overflow-x:scroll) while vertical scrolling stays with the
+         column and is mirrored to its peer by SplitColumns — the wheel over the
+         diff therefore scrolls both sides together. Both axes are explicit:
+         overflow-x:scroll with overflow-y:visible would compute y to auto and
+         give each column a second, unsynchronised scroller. */
+      '.git4idea-cmp-diff .git4idea-lf-column{overflow-x:scroll;overflow-y:auto}',
       '.git4idea-dialog-wide{min-width:min(360px,92%)}',
       '.git4idea-dialog-text{color:var(--dsw-alias-label-secondary);white-space:pre-wrap}',
       '.git4idea-dialog-actions{display:flex;justify-content:flex-end;gap:8px}',
