@@ -96,7 +96,7 @@ DSH 插件。它在 DeepSeek Harness 中提供一个 IDE 风格的 Git 工具窗
 - 显示 `~/.dsh/guojinpeng/dsh-git4idea/log/console.log` 的尾部 256 KiB，最多绘制 2000 行。
 - 每条 git 命令记录命令行、标准输出和标准错误，时间戳使用北京时间。
 - 只在控制台可见或 git 操作结束后刷新，不轮询。
-- 文件超过 5 MB 时轮转为 `console.log.1`。
+- 文件超过 64 KB 时轮转为 `console.log.1`。
 - 右键菜单只有“全部清空日志”，点击后立即清空，不确认。
 
 ## 安全与恢复
