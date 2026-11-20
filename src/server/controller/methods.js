@@ -2,7 +2,7 @@
  * dsh-git4idea — controller / methods (host half, plain JavaScript).
  */
 
-import { summary, headState, pushPreview, stats, repos, version } from './../services/workspace.js'
+import { summary, headState, pushPreview, stats, repos, version, homedir } from './../services/workspace.js'
 import { branches, log, me, mergePoint, commitDetail, diff, compare, refDiff, dirTree } from './../services/history.js'
 import { stage, unstage, discard, commit, checkout, ignoreAdd } from './../services/changes.js'
 import { branchCreate, branchUpstream, branchRename, branchDelete, merge, rebase, rebaseAbort, remoteAdd, remoteRemove, branchDeleteRemote, tagDeleteRemote, pushTags, stashClear, cherryPick, revert, reset } from './../services/branch-ops.js'
@@ -18,6 +18,7 @@ import { account, accountWeb, accountToken } from './../services/account.js'
 
 export const METHODS = {
   version,
+  homedir,
   'client-error': clientError,
   'config-get': configGet,
   'config-set': configSet,

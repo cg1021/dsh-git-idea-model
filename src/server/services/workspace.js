@@ -3,6 +3,7 @@
  */
 
 import { existsSync, readdirSync, realpathSync } from 'node:fs'
+import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { runGit, git } from './../core/git.js'
 import { cwdOf, requireRef } from './../core/payload.js'
@@ -496,6 +497,14 @@ export async function repos(payload) {
   return { cwd, isRepo: rows.some((row) => row.kind === 'workspace'), repos: rows, ...(cached ? { cached: true } : {}) }
 }
 
+
+/* The clone card needs a starting directory. The browser has no home-path
+   service, so the host answers with os.homedir() — a read-only fact, no repo
+   needed. The client fills the target field with it and refines the leaf from
+   the typed URL. */
+export async function homedir() {
+  return { home: osHomedir() }
+}
 
 export async function version() {
   const result = await runGit(process.cwd(), ['--version'])

@@ -701,6 +701,38 @@ test('the New Session clone chip sits after the mode picker in one type scale', 
     'the host wrapper drops its auto margin only while our chip is mounted')
 })
 
+test('the clone card pre-fills the target dir and offers a folder picker', () => {
+  // The browser has no home-path service, so the host exposes it read-only and
+  // the card seeds the target from it (plus the URL's repo leaf).
+  assert.match(host, /import \{ homedir as osHomedir \} from 'node:os'/)
+  assert.match(host, /export async function homedir\(\)\s*\{\s*return \{ home: osHomedir\(\) \}/)
+  assert.match(host, /^  homedir,$/m, 'the homedir route is registered pure-letter for the whitelist')
+  const dialogs = read('src/client/dialogs.js')
+  assert.match(dialogs, /function cloneNameFromUrl\(url\)/, 'the client mirrors the host repo-name cut')
+  assert.match(dialogs, /await request\('homedir'\)/, 'the card asks the host for the starting directory')
+  assert.match(dialogs, /typeof data\.home === 'string'/, 'a bad answer degrades to no default, not a crash')
+  assert.match(dialogs, /dirTouched/, 'a manual edit or a pick wins over the URL-follow default')
+  // The target is remembered in host settings (readStored/writeStored) so the
+  // card reopens on the last picked/cloned directory, with homedir only as the
+  // first-use fallback (user request).
+  assert.match(dialogs, /const CLONE_DIR_KEY = 'dsh-git4idea\.clone-dir\.v1'/)
+  assert.match(dialogs, /const remember = readStored\(CLONE_DIR_KEY\)/, 'last used dir is read on open')
+  assert.match(dialogs, /if \(typeof remember === 'string' && remember !== ''\) \{\s*homeRef\.current = remember/, 'a remembered dir wins over homedir')
+  assert.equal((dialogs.match(/writeStored\(CLONE_DIR_KEY,/g) || []).length, 2, 'both the pick and a successful clone remember the dir')
+  assert.match(dialogs, /followUrlRef/, 'a remembered exact target does not get a second repo leaf appended')
+  // Folder picker: Desktop installs the native chooser directly on globalThis;
+  // use it first, then fall back to uiWorkspace.pickDirectory(). A swallowed
+  // error made the button look dead, so failures now reach the toast stack.
+  assert.match(dialogs, /'data-git4idea-clone-pick': ''/, 'the clone card has a dedicated pick button')
+  assert.match(dialogs, /globalThis\.__DSH_DIRECTORY_PICKER__/, 'the native Desktop bridge is preferred')
+  assert.match(dialogs, /desktop\.pick\(\)/, 'the native picker opens the OS chooser')
+  assert.match(dialogs, /workspace\.pickDirectory\(\)/, 'the service is the fallback chooser')
+  assert.match(dialogs, /notifyFail\(props\.t\('clone\.pickUnavailable'\)\)/, 'no picker reports visibly instead of a dead button')
+  assert.match(dialogs, /notifyFail\(error\)/, 'a chooser rejection reaches the toast stack')
+  assert.match(dialogs, /E\(Icon, \{ name: 'folder', size: 16 \}\)/, 'the button uses the folder glyph')
+  assert.match(dialogs, /className: 'git4idea-wt-pathrow'/, 'the field and button share one input row')
+})
+
 test('the rc.2 surface contract: one focus colour, radius tokens, round capsules', () => {
   // The theme owns `--dsw-focus-ring-color` / `--dsw-focus-ring-width` and blanks
   // the colour under `html[data-input-modality='pointer']` for everything that is
@@ -805,7 +837,7 @@ test('host half keeps the destructive-confirm guards', () => {
 })
 
 test('host half exposes the method table the client calls', () => {
-  const methods = ['account', 'summary', 'head', 'stats', 'branches', 'log', 'me', 'merge-point', 'commitDetail', 'diff', 'compare', 'refDiff', 'dirTree', 'repos', 'stage', 'unstage', 'discard', 'commit', 'checkout', 'branchCreate', 'branchRename', 'branch-upstream', 'branchDelete', 'merge', 'rebase', 'cherryPick', 'revert', 'reset', 'fetch', 'pull', 'push', 'stashList', 'stashPush', 'stashApply', 'stashDrop', 'tagCreate', 'tagDelete', 'tagDeleteRemote', 'pushTags', 'clone', 'gitLogs', 'consoleLog', 'consoleClear', 'worktreeList', 'worktreeAdd', 'worktreeRemove', 'remoteAdd', 'remoteRemove', 'branchDeleteRemote', 'rebaseAbort', 'stashClear', 'undoList', 'undoApply', 'conflictDetail', 'conflictSave', 'conflictResolve', 'conflictBlame', 'operationFinish', 'version']
+  const methods = ['account', 'summary', 'head', 'stats', 'branches', 'log', 'me', 'merge-point', 'commitDetail', 'diff', 'compare', 'refDiff', 'dirTree', 'repos', 'stage', 'unstage', 'discard', 'commit', 'checkout', 'branchCreate', 'branchRename', 'branch-upstream', 'branchDelete', 'merge', 'rebase', 'cherryPick', 'revert', 'reset', 'fetch', 'pull', 'push', 'stashList', 'stashPush', 'stashApply', 'stashDrop', 'tagCreate', 'tagDelete', 'tagDeleteRemote', 'pushTags', 'clone', 'gitLogs', 'consoleLog', 'consoleClear', 'worktreeList', 'worktreeAdd', 'worktreeRemove', 'remoteAdd', 'remoteRemove', 'branchDeleteRemote', 'rebaseAbort', 'stashClear', 'undoList', 'undoApply', 'conflictDetail', 'conflictSave', 'conflictResolve', 'conflictBlame', 'operationFinish', 'version', 'homedir']
   for (const method of methods) {
     if (method === 'merge-point') { assert.match(host, /^  'merge-point': mergePoint,$/m, 'host method missing: merge-point'); continue }
     if (method === 'branch-upstream') { assert.match(host, /^  'branch-upstream': branchUpstream,$/m, 'host method missing: branch-upstream'); continue }

@@ -281,6 +281,7 @@
     "clone.dir": "目标目录(绝对路径)",
     "clone.hint": "克隆后会自动添加为工作区并打开。",
     "clone.run": "克隆",
+    "clone.pickUnavailable": "当前环境不支持文件夹选择，请手动输入目标目录。",
     "prompt.deleteTag": "要删除的标签名",
     "toolbar.newBranch": "新建分支",
     "toolbar.fetch": "提取(Fetch)",

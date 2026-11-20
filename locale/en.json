@@ -281,6 +281,7 @@
     "clone.dir": "Target directory (absolute path)",
     "clone.hint": "The clone is added as a workspace and opened automatically.",
     "clone.run": "Clone",
+    "clone.pickUnavailable": "Folder selection is unavailable here; enter the target directory manually.",
     "prompt.deleteTag": "Tag name to delete",
     "toolbar.newBranch": "New branch",
     "toolbar.fetch": "Fetch",
