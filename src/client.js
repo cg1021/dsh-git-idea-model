@@ -416,6 +416,7 @@ window.__ModuleLoader__.load({
       'clone.dir': '目标目录(绝对路径)',
       'clone.hint': '克隆后会自动添加为工作区并打开。',
       'clone.run': '克隆',
+      'clone.pickUnavailable': '当前环境不支持文件夹选择，请手动输入目标目录。',
       'prompt.deleteTag': '要删除的标签名',
       'toolbar.newBranch': '新建分支',
       'toolbar.fetch': '提取(Fetch)',
@@ -950,6 +951,7 @@ window.__ModuleLoader__.load({
       'clone.dir': 'Target directory (absolute path)',
       'clone.hint': 'The clone is added as a workspace and opened automatically.',
       'clone.run': 'Clone',
+      'clone.pickUnavailable': 'Folder selection is unavailable here; enter the target directory manually.',
       'prompt.deleteTag': 'Tag name to delete',
       'toolbar.newBranch': 'New branch',
       'toolbar.fetch': 'Fetch',
@@ -11786,17 +11788,110 @@ function Workbench(props) {
         E(Icon, { name: 'plus', size: 16 }), E('span', null, props.t('more.clone')))
     }
 
+    /* The leaf of a clone URL: the folder git will create, minus .git. Mirrors
+       the host's repoNameFromUrl so the pre-filled target ends in the same name
+       the clone actually lands in. scp-style, URL-style and local paths all cut
+       on the last slash or colon. */
+    function cloneNameFromUrl(url) {
+      if (typeof url !== 'string' || url.trim() === '') return ''
+      const tail = url.trim().replace(/\/+$/, '').replace(/\.git$/i, '')
+      const segments = tail.split(/[\\/:]/).filter((segment) => segment !== '')
+      return segments.length > 0 ? segments[segments.length - 1] : ''
+    }
+
+    /* The clone target is remembered across sessions in the host settings file
+       (readStored/writeStored), so the card opens on the directory the user
+       last picked or cloned into instead of the home dir every time. */
+    const CLONE_DIR_KEY = 'dsh-git4idea.clone-dir.v1'
+
     /* Frame-wide clone card, raised from the New Session workspace options.
        The two fields are the remote URL and the local directory, the same
-       shape as the panel's Clone dialog (IDEA Clone repository). Clone first,
-       then adopt the directory as a Workspace and open it, so the new session
-       points at the freshly cloned checkout. */
+       shape as the panel's Clone dialog (IDEA Clone repository). The target
+       starts at the last used directory (or the host home dir on first use),
+       refined with the URL's repo name, and can be replaced with the host's
+       folder picker. Clone first, then adopt the directory as a Workspace and
+       open it, so the new session points at the freshly cloned checkout. */
     function FrameCloneDialog(props) {
       const [url, setUrl] = useState('')
       const [dir, setDir] = useState('')
+      const [dirTouched, setDirTouched] = useState(false)
       const [busy, setBusy] = useState(false)
       const ref = useRef(null)
+      const homeRef = useRef('')
+      /* The homedir default is a BASE that the URL's repo leaf extends; a
+         remembered directory is an exact target. Only the former follows URL
+         edits. */
+      const followUrlRef = useRef(false)
       useEffect(() => { if (ref.current !== null) ref.current.focus() }, [])
+      /* Seed the target: last used directory wins; otherwise ask the host for
+         home and append the URL's repo leaf. A manual edit or a pick wins
+         thereafter. Both defaults are replaced once the user commits a dir. */
+      useEffect(() => {
+        let alive = true
+        const remember = readStored(CLONE_DIR_KEY)
+        if (typeof remember === 'string' && remember !== '') {
+          homeRef.current = remember
+          followUrlRef.current = false
+          setDir(remember)
+          return undefined
+        }
+        void (async () => {
+          let home = ''
+          try {
+            const data = await request('homedir')
+            if (alive === true && data !== null && data !== undefined && typeof data.home === 'string') home = data.home
+          } catch (caught) { void caught }
+          if (alive !== true) return
+          homeRef.current = home
+          followUrlRef.current = true
+          if (home !== '' && dirTouched === false) {
+            const name = cloneNameFromUrl(url)
+            setDir(name === '' ? home : home.replace(/[\\/]+$/, '') + (home.includes('\\') ? '\\' : '/') + name)
+          }
+        })()
+        return () => { alive = false }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [])
+      const changeUrl = (value) => {
+        setUrl(value)
+        /* Only the homedir default follows the URL's repo name, and only until
+           the user picks or edits the directory. A remembered exact target
+           stays put. */
+        if (dirTouched === true || followUrlRef.current !== true) return
+        const home = homeRef.current
+        if (home === '') return
+        const name = cloneNameFromUrl(value)
+        setDir(name === '' ? home : home.replace(/[\\/]+$/, '') + (home.includes('\\') ? '\\' : '/') + name)
+      }
+      /* The host owns the OS folder chooser. On Desktop the native bridge is
+         installed directly on globalThis; elsewhere fall back to the uiWorkspace
+         service (the same one the worktree dialog rides). Report a failure to
+         the corner stack instead of swallowing it — a silent catch looked like
+         a dead button. The text field stays the manual fallback. */
+      const pickDir = async () => {
+        let picked = null
+        try {
+          const desktop = typeof globalThis === 'undefined' ? undefined : globalThis.__DSH_DIRECTORY_PICKER__
+          if (desktop !== undefined && desktop !== null && typeof desktop.pick === 'function') {
+            picked = await desktop.pick()
+          } else {
+            let workspace = null
+            try { workspace = props.ctx === undefined || props.ctx === null ? null : props.ctx.get('uiWorkspace') } catch (error) { void error }
+            if (workspace === null || workspace === undefined || typeof workspace.pickDirectory !== 'function') {
+              notifyFail(props.t('clone.pickUnavailable'))
+              return
+            }
+            picked = await workspace.pickDirectory()
+          }
+          if (typeof picked === 'string' && picked !== '') {
+            setDir(picked)
+            setDirTouched(true)
+            writeStored(CLONE_DIR_KEY, picked)
+          }
+        } catch (error) {
+          notifyFail(error)
+        }
+      }
       const ready = url.trim() !== '' && dir.trim() !== '' && busy === false
       const submit = () => {
         if (ready !== true) return
@@ -11805,6 +11900,9 @@ function Workbench(props) {
           try {
             const target = dir.trim()
             await request('clone', { url: url.trim(), dir: target })
+            /* Remember the target on a successful clone: next time the card
+               opens here instead of at home (user request). */
+            writeStored(CLONE_DIR_KEY, target)
             const workspaces = props.ctx.get('workspaces')
             const uiWorkspace = props.ctx.get('uiWorkspace')
             let workspaceId = null
@@ -11838,12 +11936,18 @@ function Workbench(props) {
           E('div', { className: 'git4idea-clone-hint' }, props.t('clone.hint')),
           E('input', {
             ref: ref, className: 'git4idea-input', value: url, spellCheck: false,
-            placeholder: props.t('clone.url'), onChange: (event) => setUrl(event.target.value), onKeyDown: onKey,
+            placeholder: props.t('clone.url'), onChange: (event) => changeUrl(event.target.value), onKeyDown: onKey,
           }),
-          E('input', {
-            className: 'git4idea-input', value: dir, spellCheck: false,
-            placeholder: props.t('clone.dir'), onChange: (event) => setDir(event.target.value), onKeyDown: onKey,
-          }),
+          E('div', { className: 'git4idea-wt-pathrow' },
+            E('input', {
+              className: 'git4idea-input', value: dir, spellCheck: false,
+              placeholder: props.t('clone.dir'),
+              onChange: (event) => { setDir(event.target.value); setDirTouched(true) }, onKeyDown: onKey,
+            }),
+            E('button', {
+              type: 'button', className: 'git4idea-icon-btn', 'data-tip': props.t('worktree.pickDir'),
+              'data-git4idea-clone-pick': '', onClick: () => { void pickDir() },
+            }, E(Icon, { name: 'folder', size: 16 }))),
           E('div', { className: 'git4idea-dialog-actions' },
             E('button', { type: 'button', className: 'git4idea-btn', onClick: props.onClose }, props.t('confirm.cancel')),
             E('button', { type: 'button', className: 'git4idea-btn git4idea-btn-primary', disabled: ready === false, onClick: submit }, props.t('clone.run')))))

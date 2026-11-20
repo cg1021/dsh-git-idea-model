@@ -152,6 +152,14 @@ test('head is the two-command probe the composer pill polls (m02856)', async () 
     rmSync(other, { recursive: true, force: true })
   }
 })
+test('homedir returns the host home dir as a read-only fact', async () => {
+  const { homedir } = await import('node:os')
+  const result = await call('homedir', {})
+  assert.equal(result.status, 200)
+  assert.equal(result.body.ok, true)
+  assert.equal(result.body.data.home, homedir())
+})
+
 test('push-preview lists the commits a push would send (m02986)', async () => {
   const other = mkdtempSync(join(tmpdir(), 'dsh-git4idea-push-'))
   const bare = mkdtempSync(join(tmpdir(), 'dsh-git4idea-push-bare-'))
