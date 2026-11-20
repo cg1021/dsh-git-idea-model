@@ -18,7 +18,7 @@
  * exactly like the host's own panels do.
  */
 window.__ModuleLoader__.load({
-  id: '@guojinpeng/dsh-git4idea',
+  id: '@guojinpeng/dsh-git-idea-model',
   factory: (require) => {
     const React = require('react')
     const E = React.createElement
@@ -15756,6 +15756,6 @@ function Workbench(props) {
        mount any seat, so every readStored call below sees the saved value. */
     loadPanelSettings()
 
-    return { name: '@guojinpeng/dsh-git4idea', inject: [], apply }
+    return { name: '@guojinpeng/dsh-git-idea-model', inject: [], apply }
   },
 })

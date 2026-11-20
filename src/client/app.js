@@ -265,6 +265,6 @@
        mount any seat, so every readStored call below sees the saved value. */
     loadPanelSettings()
 
-    return { name: '@guojinpeng/dsh-git4idea', inject: [], apply }
+    return { name: '@guojinpeng/dsh-git-idea-model', inject: [], apply }
   },
 })
