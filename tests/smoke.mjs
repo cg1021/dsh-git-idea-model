@@ -684,10 +684,12 @@ test('the rc.2 surface contract: elevation instead of border plus shadow', () =>
 })
 
 test('the New Session clone chip sits after the mode picker in one type scale', () => {
-  // The host justifies its hero options strip right (margin-left:auto on the
-  // wrapper) and renders every entry through a plain div[data-slot]; the chip
-  // borrows the strip's class only while mounted, so the CSS drops that auto
-  // margin there and keeps the row's left alignment (user request).
+  // The host justifies its hero options strip right with margin-left:auto on
+  // the WRAPPER div (the slot outlet inside it is display:contents). Reach that
+  // wrapper from the inside with :has() — a rule on a descendant can never move
+  // its parent's auto margin. The previous attempt targeted the button itself
+  // and so never worked (user request: clone chip must be left, after the mode
+  // picker).
   const chip = cssRule('.git4idea-hero-action')
   assert.match(chip, /font-size:13px/, 'the chip matches the mode chip type scale (13px/500)')
   assert.match(chip, /font-weight:500/)
@@ -695,8 +697,8 @@ test('the New Session clone chip sits after the mode picker in one type scale', 
   assert.match(chip, /height:28px/)
   assert.doesNotMatch(client, /className: 'git4idea-cs-action', 'data-tip': props\.t\('more\.clone'\)/,
     'the old 12px popover-row styling is gone from the hero strip')
-  assert.match(client, /\[data-slot="conversation\.hero\.options"\]\s*\._heroOptions\{margin-left:0\}/,
-    'the strip keeps the row alignment only while the chip is mounted')
+  assert.match(client, /div:has\(> \[data-slot="conversation\.hero\.options"\]\):has\(\.git4idea-hero-action\)\{margin-left:0\}/,
+    'the host wrapper drops its auto margin only while our chip is mounted')
 })
 
 test('the rc.2 surface contract: one focus colour, radius tokens, round capsules', () => {
