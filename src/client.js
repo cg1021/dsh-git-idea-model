@@ -4862,34 +4862,72 @@ window.__ModuleLoader__.load({
       const search = needle.trim().toLowerCase()
       const entriesOf = (entries) => search === '' ? entries : entries.filter((entry) => String(entry.name).toLowerCase().indexOf(search) >= 0)
 
+      /* IDEA-style branch flyout. Local rows get the full verb set the Git
+         tool window's own branch menu offers (compare / merge / rebase /
+         update / push / favorite / copy …); remote rows keep the short
+         checkout-and-delete shape. Built imperatively so a separator never
+         sits at an edge or doubles up when a verb is unavailable. */
       const menuFor = (entry, kind) => {
-        const items = [
-          /* A branch checked out in another worktree keeps a working row
-             (m00043): only 签出 is refused, the other verbs act on the ref. */
-          entry.head === true ? null : {
-            id: 'checkout', icon: 'branch', tone: 'accent', label: t('action.checkout'),
-            disabled: entry.worktree !== null && entry.worktree !== undefined,
-            run: () => props.onCheckout(entry, kind),
-          },
-          {
-            id: 'newBranch', icon: 'plus', tone: 'success', label: t('action.newBranchFrom'),
-            run: () => props.onNewBranch(entry, kind),
-          },
-          entry.head === true ? null : {
-            id: 'merge', icon: 'merge', tone: 'business', label: t('action.mergeIntoCurrent'),
-            run: () => props.onMerge(entry),
-          },
-          kind === 'remote' ? null : {
-            id: 'rename', icon: 'edit', tone: 'secondary', label: t('action.rename'),
-            run: () => props.onRename(entry),
-          },
-          kind === 'remote' ? null : {
-            id: 'delete', icon: 'trash', tone: 'danger', danger: true, label: t('action.delete'),
-            disabled: entry.head === true,
-            run: () => props.onDelete(entry, kind),
-          },
-        ]
-        return items.filter((item) => item !== null)
+        const local = kind === 'local'
+        const current = entry.head === true
+        const items = []
+        const add = (item) => { if (item !== null) items.push(item) }
+        const sep = () => { if (items.length > 0 && items[items.length - 1].separator !== true) items.push({ separator: true }) }
+        /* A branch checked out in another worktree keeps a working row: only
+           签出 is refused, the other verbs act on the ref. */
+        add(current ? null : {
+          id: 'checkout', icon: 'branch', tone: 'accent', label: t('action.checkout'),
+          disabled: entry.worktree !== null && entry.worktree !== undefined,
+          run: () => props.onCheckout(entry, kind),
+        })
+        add(local && current === false ? {
+          id: 'compare', icon: 'compare', tone: 'violet', label: t('action.compare'),
+          run: () => { if (props.onCompare !== undefined) props.onCompare(entry) },
+        } : null)
+        add({
+          id: 'newBranch', icon: 'plus', tone: 'success', label: t('action.newBranchFrom'),
+          run: () => props.onNewBranch(entry, kind),
+        })
+        sep()
+        add(local && current === false ? {
+          id: 'merge', icon: 'merge', tone: 'business', label: t('action.mergeIntoCurrent'),
+          run: () => props.onMerge(entry),
+        } : null)
+        add(local && current === false ? {
+          id: 'rebase', icon: 'compare', tone: 'accent', label: t('action.rebaseCurrentOnto'),
+          run: () => { if (props.onRebase !== undefined) props.onRebase(entry) },
+        } : null)
+        sep()
+        add(local ? {
+          id: 'update', icon: 'fetch', tone: 'cyan', label: t('action.update'),
+          run: () => { if (props.onUpdate !== undefined) props.onUpdate(entry) },
+        } : null)
+        add(local ? {
+          id: 'push', icon: 'push', tone: 'success', label: t('toolbar.push'),
+          run: () => { if (props.onPush !== undefined) props.onPush(entry) },
+        } : null)
+        sep()
+        add(local ? {
+          id: 'favorite', icon: 'star', tone: 'warn', label: t('action.favorite'),
+          run: () => { if (props.onFavorite !== undefined) props.onFavorite(entry) },
+        } : null)
+        add({
+          id: 'copy', icon: 'tag', tone: 'secondary', label: t('action.copyName'),
+          run: () => { if (props.onCopy !== undefined) props.onCopy(entry) },
+        })
+        sep()
+        add(kind !== 'remote' ? {
+          id: 'rename', icon: 'edit', tone: 'secondary', label: t('action.rename'),
+          disabled: current,
+          run: () => props.onRename(entry),
+        } : null)
+        add(kind !== 'remote' ? {
+          id: 'delete', icon: 'trash', tone: 'danger', danger: true, label: t('action.delete'),
+          disabled: current,
+          run: () => props.onDelete(entry, kind),
+        } : null)
+        if (items.length > 0 && items[items.length - 1].separator === true) items.pop()
+        return items
       }
 
       const leaf = (entry, kind, depth) => E('button', {
@@ -4921,6 +4959,9 @@ window.__ModuleLoader__.load({
         E('span', { className: 'git4idea-cs-item-name' }, entry.name.slice(entry.name.lastIndexOf('/') + 1)),
         entry.worktree === null || entry.worktree === undefined ? null : E('span', { className: 'git4idea-cs-item-note' }, t('composer.inWorktree')),
         E('span', { className: 'git4idea-cs-item-tail' },
+          kind === 'local' && entry.upstream !== null && entry.upstream !== undefined
+            ? E('span', { className: 'git4idea-cs-item-upstream', 'data-tip': entry.upstream }, entry.upstream)
+            : null,
           entry.ahead > 0 || entry.behind > 0
             ? E('span', { className: 'git4idea-cs-item-counts' },
               entry.ahead > 0 ? E('span', { className: 'git4idea-cs-ahead' }, E(Icon, { name: 'push', size: 10 }), String(entry.ahead)) : null,
@@ -5008,14 +5049,16 @@ window.__ModuleLoader__.load({
           className: 'git4idea-cs-flyout',
           'data-cordis-panel': '',
           style: { left: String(row.x) + 'px', top: String(row.y) + 'px' },
-        }, menuFor(row.entry, row.kind).map((item) => E('button', {
-          key: item.id,
-          type: 'button',
-          className: 'git4idea-cs-sub-item',
-          'data-tone': item.danger === true ? 'danger' : (item.tone === undefined ? 'secondary' : item.tone),
-          'aria-disabled': item.disabled === true ? 'true' : 'false',
-          onClick: () => { if (item.disabled !== true) { setRow(null); item.run() } },
-        }, E('span', { className: 'git4idea-cs-sub-label' }, item.label)))))
+        }, menuFor(row.entry, row.kind).map((item, index) => item.separator === true
+          ? E('div', { key: 'sep-' + index, className: 'git4idea-cs-sub-sep' })
+          : E('button', {
+            key: item.id,
+            type: 'button',
+            className: 'git4idea-cs-sub-item',
+            'data-tone': item.danger === true ? 'danger' : (item.tone === undefined ? 'secondary' : item.tone),
+            'aria-disabled': item.disabled === true ? 'true' : 'false',
+            onClick: () => { if (item.disabled !== true) { setRow(null); item.run() } },
+          }, E('span', { className: 'git4idea-cs-sub-label' }, item.label)))))
     }
 
     /* ============================== changes ============================== */
@@ -9969,7 +10012,13 @@ function Workbench(props) {
             setDialog({ kind: 'newBranch', from: entry.name, track: kind === 'remote' })
           },
           onNewBranchAtHead: () => { setChooserSeat(null); setDialog({ kind: 'newBranch' }) },
+          onCompare: (entry) => { setChooserSeat(null); void compareWith(branches.branch, entry.name) },
           onMerge: (entry) => { setChooserSeat(null); void run('merge', { branch: entry.name }) },
+          onRebase: (entry) => { setChooserSeat(null); void run('rebase', { onto: entry.name }) },
+          onUpdate: (entry) => { setChooserSeat(null); void run(entry.head === true ? 'pull' : 'fetch', entry.head === true ? { mode: 'ff-only' } : { prune: true }) },
+          onPush: (entry) => { setChooserSeat(null); openPushDialog(entry === undefined ? undefined : { branch: entry.name }) },
+          onFavorite: (entry) => { toggleFavoriteBranch(entry.name) },
+          onCopy: (entry) => { copyValues([entry.name]) },
           onRename: (entry) => { setChooserSeat(null); setDialog({ kind: 'renameBranch', from: entry.name }) },
           onDelete: (entry, kind) => { setChooserSeat(null); deleteBranchEntries([{ kind: kind, name: entry.name, entry: entry }]) },
           /* Opening the branch menu is not a commit trigger: the entry must
@@ -11246,6 +11295,7 @@ function Workbench(props) {
       '.git4idea-cs-item-note{color:var(--dsw-alias-label-tertiary);font-size:11px;flex:none}',
       '.git4idea-cs-item-counts{display:inline-flex;gap:5px;flex:none;font-variant-numeric:tabular-nums;font-size:11px}',
       '.git4idea-cs-item-tail{display:inline-flex;align-items:center;gap:6px;margin-left:auto;flex:none;color:var(--dsw-alias-label-tertiary)}',
+      '.git4idea-cs-item-upstream{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:11px;opacity:.85}',
       '.git4idea-cs-item[data-menu=true]{background:var(--dsw-alias-interactive-bg-hover)}',
       '.git4idea-cs-static{color:var(--dsw-alias-label-tertiary);cursor:default}',
       /* Branch popover (m01216 #10): the tree's search box, the fetched sections
