@@ -1283,6 +1283,23 @@
             disabled: entry.head === true || branchName === null || busy,
             run: () => { setCsMenu(null); void csCall('merge', { branch: entry.name }) },
           },
+          /* A remote row offers 拉取 (m03874): the selected remote branch is
+             pulled INTO the branch checked out right now, ff-only like every
+             other pull in the panel — git refuses a diverged merge here. */
+          kind === 'remote' ? {
+            id: 'pull', icon: 'pull',
+            label: fill(t('action.pullRemoteInto'), { branch: entry.name, to: branchName === null ? '' : branchName }),
+            disabled: branchName === null || busy,
+            run: () => {
+              setCsMenu(null)
+              const slash = entry.name.indexOf('/')
+              void csCall('pull', {
+                remote: slash >= 0 ? entry.name.slice(0, slash) : entry.name,
+                branch: slash >= 0 ? entry.name.slice(slash + 1) : entry.name,
+                mode: 'ff-only',
+              })
+            },
+          } : null,
           /* Local rows only (m03873): update and push act on the SELECTED ref,
              not on HEAD; rename needs a local branch to move. The checked-out
              row keeps working too — pull/push then mean what they say on it. */

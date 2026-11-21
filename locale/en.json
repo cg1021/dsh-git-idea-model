@@ -126,6 +126,7 @@
     "action.delete": "Delete",
     "action.mergeIntoCurrent": "Merge into current branch",
     "action.mergeInto": "Merge ‘{from}’ into ‘{to}’",
+    "action.pullRemoteInto": "Pull ‘{branch}’ into ‘{to}’",
     "action.rebaseCurrentOnto": "Rebase current branch onto this",
     "action.compare": "Compare with current branch",
     "action.update": "Fetch",

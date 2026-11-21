@@ -261,6 +261,7 @@ window.__ModuleLoader__.load({
       'action.delete': '删除',
       'action.mergeIntoCurrent': '合并到当前分支',
       'action.mergeInto': '将 ‘{from}’ 合并到 ‘{to}’ 中',
+      'action.pullRemoteInto': '拉取 ‘{branch}’ 到 ‘{to}’',
       'action.rebaseCurrentOnto': '将当前分支变基到此',
       'action.compare': '与当前分支比较',
       'action.update': '提取(Fetch)',
@@ -796,6 +797,7 @@ window.__ModuleLoader__.load({
       'action.delete': 'Delete',
       'action.mergeIntoCurrent': 'Merge into current branch',
       'action.mergeInto': 'Merge ‘{from}’ into ‘{to}’',
+      'action.pullRemoteInto': 'Pull ‘{branch}’ into ‘{to}’',
       'action.rebaseCurrentOnto': 'Rebase current branch onto this',
       'action.compare': 'Compare with current branch',
       'action.update': 'Fetch',
@@ -8881,6 +8883,24 @@ function Workbench(props) {
           entry.remote === true
             ? { id: 'newBranch', icon: 'branchCreate', tone: 'success', label: t('action.newBranchFrom'), run: () => setDialog({ kind: 'newBranch', from: entry.name, track: true }) }
             : { id: 'newBranch', icon: 'plus', tone: 'success', label: t('action.newBranchFrom'), run: () => setDialog({ kind: 'newBranch', from: entry.name }) },
+          /* A remote row offers 拉取 (m03874): the selected remote branch is
+             pulled INTO the branch checked out right now, ff-only like every
+             other pull in the panel. */
+          entry.remote === true
+            ? {
+                id: 'pull', icon: 'pull', tone: 'cyan',
+                label: fill(t('action.pullRemoteInto'), { branch: entry.name, to: current }),
+                disabled: current === '' || blocked, reason: blocked ? t('operation.hint') : reason,
+                run: () => {
+                  const slash = entry.name.indexOf('/')
+                  void run('pull', {
+                    remote: slash >= 0 ? entry.name.slice(0, slash) : entry.name,
+                    branch: slash >= 0 ? entry.name.slice(slash + 1) : entry.name,
+                    mode: 'ff-only',
+                  })
+                },
+              }
+            : null,
           isLocal ? { id: 'rename', icon: 'file', tone: 'primary', label: t('action.rename'), run: () => setDialog({ kind: 'renameBranch', from: entry.name }) } : null,
           isLocal ? { id: 'delete', icon: 'trash', tone: 'danger', label: t('action.delete'), danger: true, disabled: entry.head === true, reason: reason, run: () => setDialog({ kind: 'deleteBranch', name: entry.name }) } : null,
           entry.tag === true
@@ -13059,6 +13079,23 @@ function Workbench(props) {
             disabled: entry.head === true || branchName === null || busy,
             run: () => { setCsMenu(null); void csCall('merge', { branch: entry.name }) },
           },
+          /* A remote row offers 拉取 (m03874): the selected remote branch is
+             pulled INTO the branch checked out right now, ff-only like every
+             other pull in the panel — git refuses a diverged merge here. */
+          kind === 'remote' ? {
+            id: 'pull', icon: 'pull',
+            label: fill(t('action.pullRemoteInto'), { branch: entry.name, to: branchName === null ? '' : branchName }),
+            disabled: branchName === null || busy,
+            run: () => {
+              setCsMenu(null)
+              const slash = entry.name.indexOf('/')
+              void csCall('pull', {
+                remote: slash >= 0 ? entry.name.slice(0, slash) : entry.name,
+                branch: slash >= 0 ? entry.name.slice(slash + 1) : entry.name,
+                mode: 'ff-only',
+              })
+            },
+          } : null,
           /* Local rows only (m03873): update and push act on the SELECTED ref,
              not on HEAD; rename needs a local branch to move. The checked-out
              row keeps working too — pull/push then mean what they say on it. */

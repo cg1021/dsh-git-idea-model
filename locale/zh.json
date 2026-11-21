@@ -126,6 +126,7 @@
     "action.delete": "删除",
     "action.mergeIntoCurrent": "合并到当前分支",
     "action.mergeInto": "将 ‘{from}’ 合并到 ‘{to}’ 中",
+    "action.pullRemoteInto": "拉取 ‘{branch}’ 到 ‘{to}’",
     "action.rebaseCurrentOnto": "将当前分支变基到此",
     "action.compare": "与当前分支比较",
     "action.update": "提取(Fetch)",

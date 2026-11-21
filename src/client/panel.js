@@ -1316,6 +1316,24 @@
           entry.remote === true
             ? { id: 'newBranch', icon: 'branchCreate', tone: 'success', label: t('action.newBranchFrom'), run: () => setDialog({ kind: 'newBranch', from: entry.name, track: true }) }
             : { id: 'newBranch', icon: 'plus', tone: 'success', label: t('action.newBranchFrom'), run: () => setDialog({ kind: 'newBranch', from: entry.name }) },
+          /* A remote row offers 拉取 (m03874): the selected remote branch is
+             pulled INTO the branch checked out right now, ff-only like every
+             other pull in the panel. */
+          entry.remote === true
+            ? {
+                id: 'pull', icon: 'pull', tone: 'cyan',
+                label: fill(t('action.pullRemoteInto'), { branch: entry.name, to: current }),
+                disabled: current === '' || blocked, reason: blocked ? t('operation.hint') : reason,
+                run: () => {
+                  const slash = entry.name.indexOf('/')
+                  void run('pull', {
+                    remote: slash >= 0 ? entry.name.slice(0, slash) : entry.name,
+                    branch: slash >= 0 ? entry.name.slice(slash + 1) : entry.name,
+                    mode: 'ff-only',
+                  })
+                },
+              }
+            : null,
           isLocal ? { id: 'rename', icon: 'file', tone: 'primary', label: t('action.rename'), run: () => setDialog({ kind: 'renameBranch', from: entry.name }) } : null,
           isLocal ? { id: 'delete', icon: 'trash', tone: 'danger', label: t('action.delete'), danger: true, disabled: entry.head === true, reason: reason, run: () => setDialog({ kind: 'deleteBranch', name: entry.name }) } : null,
           entry.tag === true
